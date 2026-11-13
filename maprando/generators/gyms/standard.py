@@ -53,6 +53,60 @@ def walkable(c):
     """a plan tile the player can walk on: floor or a warp."""
     return c in ('.', 'W')
 
+def _cut_cells(free):
+    """articulation cells of a set of floor cells (4-connected): taking one away splits the floor."""
+    disc, low, out = {}, {}, set()
+    t = 0
+    for root in sorted(free):
+        if root in disc: continue
+        disc[root] = low[root] = t; t += 1
+        stack = [(root, None, iter(D4))]; kids = 0
+        while stack:
+            v, par, it = stack[-1]
+            adv = False
+            for dx, dy in it:
+                n = (v[0] + dx, v[1] + dy)
+                if n not in free or n == par: continue
+                if n in disc: low[v] = min(low[v], disc[n]); continue
+                disc[n] = low[n] = t; t += 1
+                if v == root: kids += 1
+                stack.append((n, v, iter(D4))); adv = True; break
+            if adv: continue
+            stack.pop()
+            if par is not None:
+                low[par] = min(low[par], low[v])
+                if par != root and low[v] >= disc[par]: out.add(par)
+        if kids > 1: out.add(root)
+    return out
+
+
+def _view(c, sight, dirs, base, occ):
+    """the floor cells a trainer at c sees (up to sight cells, until someone in occ blocks)."""
+    seen = set()
+    for dx, dy in dirs:
+        for k in range(1, sight + 1):
+            s = (c[0] + dx*k, c[1] + dy*k)
+            if s not in base or s in occ: break
+            seen.add(s)
+    return seen
+
+
+def _stops(c, sight, dirs, fr):
+    """the cells a trainer at c may stop on when it walks up to the player."""
+    out = []
+    for dx, dy in dirs:
+        for k in range(1, sight):
+            s = (c[0] + dx*k, c[1] + dy*k)
+            if s not in fr or (s[0] + dx, s[1] + dy) not in fr: break
+            out.append(s)
+    return out
+
+
+def _dirs_of(o):
+    """the directions a person faces (spinners: all four)."""
+    return [FACING[o.movement]] if o.movement in FACING else list(D4)
+
+
 class GymGenerator:
     # weights: walk, second way, trainers watching, unreached, dead ends, lone walls, run ends,
     # open floor, wall share
@@ -282,73 +336,10 @@ class GymGenerator:
         watch the way to the goal where possible. None if they do not fit."""
         base = set(dist)
         W2 = self.W2
-        def cuts(free):
-            disc, low, out = {}, {}, set()
-            t = 0
-            for root in sorted(free):
-                if root in disc: continue
-                disc[root] = low[root] = t; t += 1
-                stack = [(root, None, iter(D4))]; kids = 0
-                while stack:
-                    v, par, it = stack[-1]
-                    adv = False
-                    for dx, dy in it:
-                        n = (v[0] + dx, v[1] + dy)
-                        if n not in free or n == par: continue
-                        if n in disc: low[v] = min(low[v], disc[n]); continue
-                        disc[n] = low[n] = t; t += 1
-                        if v == root: kids += 1
-                        stack.append((n, v, iter(D4))); adv = True; break
-                    if adv: continue
-                    stack.pop()
-                    if par is not None:
-                        low[par] = min(low[par], low[v])
-                        if par != root and low[v] >= disc[par]: out.add(par)
-                if kids > 1: out.add(root)
-            return out
-        fronts = set(goal)
-        def ok_occ(occ):
-            fr = base - occ
-            if not (fronts & fr): return False
-            return all(any((t[0]+dx, t[1]+dy) in fr for dx, dy in D4) for t in occ)
-        def view(c, sight, dirs, occ):
-            seen = set()
-            for dx, dy in dirs:
-                for k in range(1, sight + 1):
-                    s = (c[0] + dx*k, c[1] + dy*k)
-                    if s not in base or s in occ: break
-                    seen.add(s)
-            return seen
-        def stops(c, sight, dirs, fr):
-            out = []
-            for dx, dy in dirs:
-                for k in range(1, sight):
-                    s = (c[0] + dx*k, c[1] + dy*k)
-                    if s not in fr or (s[0] + dx, s[1] + dy) not in fr: break
-                    out.append(s)
-            return out
-        def dirs_of(o):
-            return [FACING[o.movement]] if o.movement in FACING else list(D4)
         taken = set(); pos = {}; watched = 0
-        # in a symmetric gym, trainers whose facings mirror each other stand as mirror twins
         units = list(units)
         rng.shuffle(units)
-        groups = []
-        if self.sym:
-            left = list(units)
-            while left:
-                u = left.pop(0)
-                mate = None
-                if len(u) == 1:
-                    o = u[0]
-                    for v in left:
-                        if len(v) == 1 and int(v[0].sight or 0) == int(o.sight or 0) and \
-                           FACING.get(v[0].movement) == MIRROR.get(FACING.get(o.movement)) and o.movement in FACING:
-                            mate = v; break
-                if mate: left.remove(mate); groups.append([u, mate])
-                else: groups.append([u])
-        else:
-            groups = [[u] for u in units]
+        groups = self._twin_groups(units)
         def mir(c): return (W2 - 1 - c[0], c[1])
         for grp in groups:
             opts = []
@@ -365,23 +356,23 @@ class GymGenerator:
                 sees = set()
                 for unit, cs in zip(grp, cells):
                     for o, x in zip(unit, cs):
-                        sees |= view(x, int(o.sight or 0), dirs_of(o), taken | set(flat))
+                        sees |= _view(x, int(o.sight or 0), _dirs_of(o), base, taken | set(flat))
                 opts.append((0 if sees & ways else 1, rng.random(), cells, flat))
             opts.sort(key=lambda t: (t[0], t[1]))
             pick = None
-            cut0 = cuts(base - taken)
+            cut0 = _cut_cells(base - taken)
             for w, _r, cells, flat in opts[:40]:
                 if any(x in cut0 for x in flat): continue
                 occ = taken | set(flat)
-                if not ok_occ(occ): continue
+                if not self._ok_occ(occ, base, goal): continue
                 fr = base - occ
-                cut1 = cuts(fr)
+                cut1 = _cut_cells(fr)
                 bad = False
                 for unit, cs in zip(grp, cells):
                     for o, x in zip(unit, cs):
                         if int(o.sight or 0) <= 0: continue
-                        ds = dirs_of(o); ds2 = ds + [(-a, -b) for a, b in ds if (-a, -b) not in ds]
-                        if any(st in cut1 for st in stops(x, int(o.sight), ds2, fr)): bad = True; break
+                        ds = _dirs_of(o); ds2 = ds + [(-a, -b) for a, b in ds if (-a, -b) not in ds]
+                        if any(st in cut1 for st in _stops(x, int(o.sight), ds2, fr)): bad = True; break
                     if bad: break
                 if bad: continue
                 pick = (w, cells, flat); break
@@ -390,47 +381,82 @@ class GymGenerator:
                 for o, x in zip(unit, cs): pos[o.index] = x
             taken |= set(pick[2]); watched += (1 - pick[0]) * len(grp)
         if getattr(self, 'maze', False):
-            # people who never leave their tile (Fuchsia's look-alikes only spin; no sight) are
-            # part of the maze: each goes where the walk to the leader gets longest, everyone
-            # still reachable and no floor shut off behind anyone
-            fr0 = [t for t in goal]
-            starts = [c for c in self.starts if c in base]
-            def reach(free):
-                dd = {c: 0 for c in starts if c in free}; q = deque(dd)
-                while q:
-                    c = q.popleft()
-                    for dx, dy in D4:
-                        n = (c[0] + dx, c[1] + dy)
-                        if n in free and n not in dd: dd[n] = dd[c] + 1; q.append(n)
-                return dd
-            for o in others:
-                cs = [c for c in base if c not in taken and c not in self.fixed and c not in self.near_door
-                      and c not in goal and c not in set(self.starts)]
-                rng.shuffle(cs)
-                best = None
-                for c in cs[:24]:
-                    occ = taken | {c}
-                    free = base - occ
-                    dd = reach(free)
-                    fd = [dd[t] for t in fr0 if t in dd]
-                    if not fd: continue
-                    if not all(any((x[0] + dx, x[1] + dy) in dd for dx, dy in D4) for x in occ): continue
-                    if len(dd) < len(free): continue          # no floor shut off behind anyone
-                    val = min(fd) + 0.5 * rng.random()
-                    if best is None or val > best[0]: best = (val, c)
-                if best is None: return None
-                pos[o.index] = best[1]; taken.add(best[1])
+            more = self._place_maze_people(others, base, taken, goal, rng)
+            if more is None: return None
+            pos.update(more)
             return pos, watched
         for o in others:
-            cut0 = cuts(base - taken)
+            cut0 = _cut_cells(base - taken)
             cs = sorted(c for c in base if c not in taken and c not in ways and c not in self.fixed
                         and c not in cut0 and c not in set(self.starts))
             rng.shuffle(cs)
             for c in cs:
-                if ok_occ(taken | {c}): pos[o.index] = c; taken.add(c); break
+                if self._ok_occ(taken | {c}, base, goal): pos[o.index] = c; taken.add(c); break
             else:
                 return None
         return pos, watched
+
+    def _ok_occ(self, occ, base, goal):
+        """with people on occ: some goal cell is free and everyone can be walked up to."""
+        fr = base - occ
+        if not (set(goal) & fr): return False
+        return all(any((t[0]+dx, t[1]+dy) in fr for dx, dy in D4) for t in occ)
+
+    def _twin_groups(self, units):
+        """the units to place, grouped: in a symmetric gym, trainers whose facings mirror each other
+        stand as mirror twins."""
+        groups = []
+        if self.sym:
+            left = list(units)
+            while left:
+                u = left.pop(0)
+                mate = None
+                if len(u) == 1:
+                    o = u[0]
+                    for v in left:
+                        if len(v) == 1 and int(v[0].sight or 0) == int(o.sight or 0) and \
+                           FACING.get(v[0].movement) == MIRROR.get(FACING.get(o.movement)) and o.movement in FACING:
+                            mate = v; break
+                if mate: left.remove(mate); groups.append([u, mate])
+                else: groups.append([u])
+        else:
+            groups = [[u] for u in units]
+        return groups
+
+    def _place_maze_people(self, others, base, taken, goal, rng):
+        """people who never leave their tile (Fuchsia's look-alikes only spin; no sight) are part of
+        the maze: each goes where the walk to the leader gets longest, everyone still reachable and
+        no floor shut off behind anyone. {object index: cell}, or None if someone does not fit."""
+        pos = {}
+        fr0 = [t for t in goal]
+        starts = [c for c in self.starts if c in base]
+        def reach(free):
+            dd = {c: 0 for c in starts if c in free}; q = deque(dd)
+            while q:
+                c = q.popleft()
+                for dx, dy in D4:
+                    n = (c[0] + dx, c[1] + dy)
+                    if n in free and n not in dd: dd[n] = dd[c] + 1; q.append(n)
+            return dd
+        for o in others:
+            cs = [c for c in base if c not in taken and c not in self.fixed and c not in self.near_door
+                  and c not in goal and c not in set(self.starts)]
+            rng.shuffle(cs)
+            best = None
+            for c in cs[:24]:
+                occ = taken | {c}
+                free = base - occ
+                dd = reach(free)
+                fd = [dd[t] for t in fr0 if t in dd]
+                if not fd: continue
+                if not all(any((x[0] + dx, x[1] + dy) in dd for dx, dy in D4) for x in occ): continue
+                if len(dd) < len(free): continue          # no floor shut off behind anyone
+                val = min(fd) + 0.5 * rng.random()
+                if best is None or val > best[0]: best = (val, c)
+            if best is None: return None
+            pos[o.index] = best[1]; taken.add(best[1])
+        return pos
+
 
     # ------------------------------------------------------------------ search
     def anneal(self, rng, iters):

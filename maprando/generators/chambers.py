@@ -451,171 +451,209 @@ def build_room(g, rng, layouts=25, log=None, name='IcePathB1F'):
     return None
 
 
+class _NoLayout(Exception):
+    """the corridors cannot join the pieces, or the room cannot be drawn."""
+
+
 def corridors_and_draw(g, pieces, rng, log=None, iters=4000, ladders=None):
     """the free blocks outside the pieces: corridors joining both ladders and every porch (no
-    pushing), as long a walk between them as a tidy layout allows; then the map is drawn."""
-    import copy
-    W, H = g.W, g.H
-    free = set(g.free)
-    kind = dict(g.top)
-    pcells, forced, porches = set(), {}, []
-    holes_at, boulders_at = {}, {}
-    extras_left = list(g.extras)
-    walk_p = set()
-    for (pc, st, info), (bx0, by0), side in pieces:
-        gg, hcell = pc.grid(st)
-        ox, oy = bx0 * 2 - 1, by0 * 2 - 1
-        for (x, y), k in gg.items():
-            c = (y + oy) * W + x + ox
-            kind[c] = 'W' if k == 'H' else k; pcells.add(c)
-            if k != '#': walk_p.add(c)
-        for w, (x, y) in hcell.items(): holes_at[w] = (x + ox, y + oy)
-        for w, (x, y) in st['boulders'].items():
-            if isinstance(w, tuple): bi = extras_left.pop(0)          # a boulder with no hole
-            else: bi = next(i for i, ww in g.pairs if ww == w)
-            boulders_at[bi] = (x + ox, y + oy)
-        dx, dy = side
-        dr = st['door']; porch = (dr[0] + ox + dx, dr[1] + oy + dy)
-        porches.append(porch[1] * W + porch[0])
-        # rock all round the piece except the porch
-        xs = [c % W for c in pcells]; ys = [c // W for c in pcells]
-    # rock just outside the piece wherever its floor reaches its edge (its own rock edges need none)
-    for c in walk_p:
-        x, y = c % W, c // W
-        for n in (c - 1 if x > 0 else -1, c + 1 if x < W - 1 else -1, c - W, c + W):
-            if 0 <= n < W * H and n not in pcells: forced[n] = '#'
-    for c in porches: forced[c] = '.'
-    # moving stairs: their own block, as in vanilla, in the corridor space
-    lad = dict(ladders if ladders is not None else g.fixed_wcell)
-    lad_blk = {}
-    for w, c in lad.items():
-        b = ((c % W) // 2, (c // W) // 2)
-        if b in free:
-            lad_blk[b] = w
+    pushing), as long a walk between them as a tidy layout allows; then the map is drawn.
+    None (with the reason sent to log) if that fails."""
+    try:
+        room = _Room(g, pieces, ladders)
+        room.anneal(rng, iters)
+        room.place_people(rng)
+        return room.draw(rng)
+    except _NoLayout as e:
+        if log: log(str(e))
+        return None
+
+
+class _Room:
+    """A boulder room being laid out on cells: the pieces stamped in (kind), the corridor cells
+    between them (corr; grid holds their current tiles) and the stairs and porches to join."""
+
+    def __init__(self, g, pieces, ladders=None):
+        self.g = g
+        W = self.W = g.W
+        free = set(g.free)
+        kind = dict(g.top)
+        pcells, forced, porches = set(), {}, []
+        self.holes_at, self.boulders_at = {}, {}
+        extras_left = list(g.extras)
+        walk_p = set()
+        for (pc, st, info), (bx0, by0), side in pieces:
+            gg, hcell = pc.grid(st)
+            ox, oy = bx0 * 2 - 1, by0 * 2 - 1
+            for (x, y), k in gg.items():
+                c = (y + oy) * W + x + ox
+                kind[c] = 'W' if k == 'H' else k; pcells.add(c)
+                if k != '#': walk_p.add(c)
+            for w, (x, y) in hcell.items(): self.holes_at[w] = (x + ox, y + oy)
+            for w, (x, y) in st['boulders'].items():
+                if isinstance(w, tuple): bi = extras_left.pop(0)          # a boulder with no hole
+                else: bi = next(i for i, ww in g.pairs if ww == w)
+                self.boulders_at[bi] = (x + ox, y + oy)
+            dx, dy = side
+            dr = st['door']; porch = (dr[0] + ox + dx, dr[1] + oy + dy)
+            porches.append(porch[1] * W + porch[0])
+        # rock just outside the piece wherever its floor reaches its edge (its own rock edges need none)
+        for c in walk_p:
+            x, y = c % W, c // W
+            for n in (c - 1 if x > 0 else -1, c + 1 if x < W - 1 else -1, c - W, c + W):
+                if 0 <= n < W * g.H and n not in pcells: forced[n] = '#'
+        for c in porches: forced[c] = '.'
+        # moving stairs: their own block, as in vanilla, in the corridor space
+        self.lad = lad = dict(ladders if ladders is not None else g.fixed_wcell)
+        self.lad_blk = lad_blk = {}
+        for w, c in lad.items():
+            b = ((c % W) // 2, (c // W) // 2)
+            if b in free:
+                lad_blk[b] = w
+                for q in range(4):
+                    cc = (b[1] * 2 + (q >> 1)) * W + b[0] * 2 + (q & 1)
+                    k = g.unit_pat[w][q]
+                    kind[cc] = 'W' if k == 'W' else ('.' if k == '.' else '#')
+                    if cc in forced and kind[cc] != forced[cc]: raise _NoLayout('a ladder against a piece')
+                    forced[cc] = kind[cc] if kind[cc] != 'W' else '#'
+        self.corr = sorted(c for c in range(W * g.H) if ((c % W) // 2, (c // W) // 2) in free and c not in pcells
+                           and ((c % W) // 2, (c // W) // 2) not in lad_blk)
+        self.var = [c for c in self.corr if c not in forced]
+        self.grid = dict(kind)
+        for c in self.corr: self.grid[c] = forced.get(c, '.')
+        self.ladders = list(lad.values())
+        self.targets = self.ladders + porches
+        self.cblocks = sorted({((c % W) // 2, (c // W) // 2) for c in self.corr})
+        for b, w in lad_blk.items():
             for q in range(4):
                 cc = (b[1] * 2 + (q >> 1)) * W + b[0] * 2 + (q & 1)
-                k = g.unit_pat[w][q]
-                kind[cc] = 'W' if k == 'W' else ('.' if k == '.' else '#')
-                if cc in forced and kind[cc] != forced[cc]:
-                    if log: log('a ladder against a piece')
-                    return None
-                forced[cc] = kind[cc] if kind[cc] != 'W' else '#'
-    corr = sorted(c for c in range(W * H) if ((c % W) // 2, (c // W) // 2) in free and c not in pcells
-                  and ((c % W) // 2, (c // W) // 2) not in lad_blk)
-    var = [c for c in corr if c not in forced]
-    grid = dict(kind)
-    for c in corr: grid[c] = forced.get(c, '.')
-    ladders = list(lad.values())
-    targets = ladders + porches
-    def blk_ok(bx, by):
-        p = tuple(grid[(by * 2 + (q >> 1)) * W + bx * 2 + (q & 1)] for q in range(4))
-        return p in g.pats
-    cblocks = sorted({((c % W) // 2, (c // W) // 2) for c in corr})
-    for b, w in lad_blk.items():
-        for q in range(4):
-            cc = (b[1] * 2 + (q >> 1)) * W + b[0] * 2 + (q & 1)
-            grid[cc] = kind[cc]
-    def walk(c): return grid.get(c) == '.' and c not in pcells or c in porches
-    def bfs(src):
+                self.grid[cc] = kind[cc]
+        self.free, self.pcells, self.porches, self.forced = free, pcells, porches, forced
+
+    def blk_ok(self, bx, by):
+        """can the tileset draw block (bx, by) as the grid has it?"""
+        W = self.W
+        p = tuple(self.grid[(by * 2 + (q >> 1)) * W + bx * 2 + (q & 1)] for q in range(4))
+        return p in self.g.pats
+
+    def walk(self, c):
+        return self.grid.get(c) == '.' and c not in self.pcells or c in self.porches
+
+    def bfs(self, src):
+        """steps from src over corridor floor (stairs are reached but not walked through)."""
+        W, H, ladders = self.W, self.g.H, self.ladders
         dist = {src: 0}; q = deque([src])
         while q:
             a = q.popleft()
             x = a % W
             for n in (a - 1 if x > 0 else -1, a + 1 if x < W - 1 else -1, a - W, a + W):
-                if 0 <= n < W * H and n not in dist and (walk(n) or n in ladders):
+                if 0 <= n < W * H and n not in dist and (self.walk(n) or n in ladders):
                     dist[n] = dist[a] + 1
                     if n not in ladders: q.append(n)
         return dist
-    def score():
-        e = sum(2 for b in cblocks if not blk_ok(*b))
-        d0 = bfs(ladders[0])
-        e += 10 * sum(1 for t in targets if t not in d0)
-        fl = [c for c in corr if grid[c] == '.']
+
+    def score(self):
+        """(score, errors): errors count undrawable blocks and unjoined stairs, porches and floor;
+        the score also rewards a long walk between them and punishes open 2x2 floor."""
+        W, grid = self.W, self.grid
+        e = sum(2 for b in self.cblocks if not self.blk_ok(*b))
+        d0 = self.bfs(self.ladders[0])
+        e += 10 * sum(1 for t in self.targets if t not in d0)
+        fl = [c for c in self.corr if grid[c] == '.']
         e += 0.5 * sum(1 for c in fl if c not in d0)
         opn = sum(1 for c in fl if grid.get(c + 1) == '.' and grid.get(c + W) == '.' and grid.get(c + W + 1) == '.')
-        walkv = sum(min(d0.get(t, 0), 60) for t in targets)
+        walkv = sum(min(d0.get(t, 0), 60) for t in self.targets)
         return -10 * e + 0.3 * walkv - 0.6 * opn, e
-    cur, ce = score()
-    best = (cur, ce, dict(grid))
-    varset = set(var)
-    vblocks = sorted({((c % W) // 2, (c // W) // 2) for c in var})
-    def bcells(b): return [(b[1] * 2 + (q >> 1)) * W + b[0] * 2 + (q & 1) for q in range(4)]
-    for it in range(iters):
-        T = 4.0 * (1 - it / iters) + 0.1
-        if rng.random() < 0.4 and vblocks:
-            # a whole block to another drawable shape that keeps its forced tiles
-            b = rng.choice(vblocks); cs = bcells(b)
-            opts = [p for p in g.pats if all(cc in varset or grid.get(cc) == k for cc, k in zip(cs, p))]
-            if not opts: continue
-            p = rng.choice(opts)
-            olds = [(cc, grid[cc]) for cc in cs if cc in varset]
-            for cc, k in zip(cs, p):
-                if cc in varset: grid[cc] = k
-        else:
-            c = rng.choice(var)
-            olds = [(c, grid[c])]; grid[c] = '#' if grid[c] == '.' else '.'
-        sc, e = score()
-        if sc >= cur or rng.random() < math.exp((sc - cur) / T):
-            cur, ce = sc, e
-            if e == 0 and sc > best[0]: best = (sc, e, dict(grid))
-        else:
-            for cc, k in olds: grid[cc] = k
-    if best[1] != 0:
-        if log: log('corridors: no layout joins everything')
-        return None
-    grid = best[2]
-    # people in the room (Blackthorn's trainers: walls, they never move) stand in the corridors:
-    # never beside the stairs, never shutting anything off, and each can be walked up to
-    people_at = {}
-    if g.people:
+
+    def anneal(self, rng, iters):
+        """simulated annealing over the corridor tiles; keeps the best layout with no errors."""
+        W, grid, var, g = self.W, self.grid, self.var, self.g
+        cur, ce = self.score()
+        best = (cur, ce, dict(grid))
+        varset = set(var)
+        vblocks = sorted({((c % W) // 2, (c // W) // 2) for c in var})
+        def bcells(b): return [(b[1] * 2 + (q >> 1)) * W + b[0] * 2 + (q & 1) for q in range(4)]
+        for it in range(iters):
+            T = 4.0 * (1 - it / iters) + 0.1
+            if rng.random() < 0.4 and vblocks:
+                # a whole block to another drawable shape that keeps its forced tiles
+                b = rng.choice(vblocks); cs = bcells(b)
+                opts = [p for p in g.pats if all(cc in varset or grid.get(cc) == k for cc, k in zip(cs, p))]
+                if not opts: continue
+                p = rng.choice(opts)
+                olds = [(cc, grid[cc]) for cc in cs if cc in varset]
+                for cc, k in zip(cs, p):
+                    if cc in varset: grid[cc] = k
+            else:
+                c = rng.choice(var)
+                olds = [(c, grid[c])]; grid[c] = '#' if grid[c] == '.' else '.'
+            sc, e = self.score()
+            if sc >= cur or rng.random() < math.exp((sc - cur) / T):
+                cur, ce = sc, e
+                if e == 0 and sc > best[0]: best = (sc, e, dict(grid))
+            else:
+                for cc, k in olds: grid[cc] = k
+        if best[1] != 0: raise _NoLayout('corridors: no layout joins everything')
+        self.grid = best[2]
+
+    def place_people(self, rng):
+        """people in the room (Blackthorn's trainers: walls, they never move) stand in the
+        corridors: never beside the stairs, never shutting anything off, and each can be walked up
+        to. Sets self.people_at {object index: cell}."""
+        W, grid, ladders, g = self.W, self.grid, self.ladders, self.g
+        self.people_at = {}
+        if not g.people: return
         stair_near = set(ladders) | {n for c in ladders for n in (c - 1, c + 1, c - W, c + W)}
-        cand = [c for c in corr if grid[c] == '.' and c not in forced and c not in stair_near and c not in porches]
+        cand = [c for c in self.corr if grid[c] == '.' and c not in self.forced and c not in stair_near
+                and c not in self.porches]
         rng.shuffle(cand)
         occ = set()
         for i in g.people:
             for c in cand:
                 if c in occ: continue
                 grid[c] = '#'
-                d0 = bfs(ladders[0])
-                ok = all(t in d0 for t in targets) and \
-                     all(cc in d0 for cc in corr if grid[cc] == '.') and \
+                d0 = self.bfs(ladders[0])
+                ok = all(t in d0 for t in self.targets) and \
+                     all(cc in d0 for cc in self.corr if grid[cc] == '.') and \
                      any(n in d0 for n in (c - 1, c + 1, c - W, c + W))
                 grid[c] = '.'
                 if ok:
-                    occ.add(c); people_at[i] = c; grid[c] = '#'; break
+                    occ.add(c); self.people_at[i] = c; grid[c] = '#'; break
             else:
-                if log: log('no room for a person')
-                return None
+                raise _NoLayout('no room for a person')
         for c in occ: grid[c] = '.'
-    # draw: hole blocks as vanilla's, the rest from the room's own blocks by shape
-    m2 = copy.deepcopy(g.base)
-    out = bytearray(m2.blocks)
-    hole_blk = {}
-    for w, (x, y) in holes_at.items():
-        hole_blk[(x // 2, y // 2)] = w
-        m2.warps[w].x, m2.warps[w].y = x, y
-    for w, c in lad.items():
-        m2.warps[w].x, m2.warps[w].y = c % W, c // W
-    for (bx, by) in sorted(free, key=lambda b: (b[1], b[0])):
-        i = by * g.Wb + bx
-        if (bx, by) in hole_blk: out[i] = g.unit_blk[hole_blk[(bx, by)]]; continue
-        if (bx, by) in lad_blk: out[i] = g.unit_blk[lad_blk[(bx, by)]]; continue
-        p = tuple(grid[(by * 2 + (q >> 1)) * W + bx * 2 + (q & 1)] for q in range(4))
-        p = tuple('#' if k == '#' else '.' for k in p)
-        left = out[i - 1] if bx > 0 else None
-        up = out[i - g.Wb] if by > 0 else None
-        blk = None
-        for cat in (g.own_cat, g.cat):
-            if cat.has(p):
-                blk = cat.choose(p, left, up, rng, ok=lambda b, cat=cat, p=p: g.plain(cat, b, p) and b in g.allowed)
-                if blk is not None: break
-        if blk is None:
-            if log: log(f'no block draws {p}')
-            return None
-        out[i] = blk
-    m2.blocks = bytes(out)
-    for i, (x, y) in boulders_at.items():
-        m2.objects[i].x, m2.objects[i].y = x, y
-    for i, c in people_at.items():
-        m2.objects[i].x, m2.objects[i].y = c % W, c // W
-    return m2
+
+    def draw(self, rng):
+        """the map: hole and stair blocks as vanilla's, the rest from the room's own blocks by
+        shape; warps, boulders and people moved."""
+        import copy
+        W, grid, g = self.W, self.grid, self.g
+        m2 = copy.deepcopy(g.base)
+        out = bytearray(m2.blocks)
+        hole_blk = {}
+        for w, (x, y) in self.holes_at.items():
+            hole_blk[(x // 2, y // 2)] = w
+            m2.warps[w].x, m2.warps[w].y = x, y
+        for w, c in self.lad.items():
+            m2.warps[w].x, m2.warps[w].y = c % W, c // W
+        for (bx, by) in sorted(self.free, key=lambda b: (b[1], b[0])):
+            i = by * g.Wb + bx
+            if (bx, by) in hole_blk: out[i] = g.unit_blk[hole_blk[(bx, by)]]; continue
+            if (bx, by) in self.lad_blk: out[i] = g.unit_blk[self.lad_blk[(bx, by)]]; continue
+            p = tuple(grid[(by * 2 + (q >> 1)) * W + bx * 2 + (q & 1)] for q in range(4))
+            p = tuple('#' if k == '#' else '.' for k in p)
+            left = out[i - 1] if bx > 0 else None
+            up = out[i - g.Wb] if by > 0 else None
+            blk = None
+            for cat in (g.own_cat, g.cat):
+                if cat.has(p):
+                    blk = cat.choose(p, left, up, rng, ok=lambda b, cat=cat, p=p: g.plain(cat, b, p) and b in g.allowed)
+                    if blk is not None: break
+            if blk is None: raise _NoLayout(f'no block draws {p}')
+            out[i] = blk
+        m2.blocks = bytes(out)
+        for i, (x, y) in self.boulders_at.items():
+            m2.objects[i].x, m2.objects[i].y = x, y
+        for i, c in self.people_at.items():
+            m2.objects[i].x, m2.objects[i].y = c % W, c // W
+        return m2
