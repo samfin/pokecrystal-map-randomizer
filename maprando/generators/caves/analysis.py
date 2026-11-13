@@ -10,6 +10,21 @@ from maprando.model.zones import medium
 
 class AnalysisMixin:
     def _analyze(self):
+        """read the vanilla map: its zones and the gates between them (self.Z, self.pairs), the
+        blocks that must keep their vanilla layout (self.lock), the warps that may move, and where
+        each check sits (self.anchor_zones)."""
+        s, R = self._find_zones()
+        lock = self._lock_fixed()
+        self._lock_scripted(lock)
+        self._grow_lock(lock, s, R)
+        self._seal_broken_jumps()
+        edges = self._gate_zones(s, R)
+        self._pair_zones(edges)
+        self._place_checks(R)
+
+    def _find_zones(self):
+        """the zones the player can reach (R), the void around caves, and the zones to place (self.Z).
+        Returns (searcher, R)."""
         mm, zg = self.mm, self.zg
         self.route = any(a.kind == 'edge' for a in mm.anchors)
         if self.m.tileset == 'TILESET_FOREST': self.route = True   # forest: tree walls, block-aligned like routes
@@ -45,9 +60,21 @@ class AnalysisMixin:
         self.Z = sorted(R - self.T)
         self.kind = {z: ('water' if medium(mm, zg.zones[z][0]) else 'land') for z in self.Z}
         self._movable_warps()
-        moving = {mm.idx(w.x, w.y) for blk, (ws, _b, _z) in self.warp_units.items() for w in ws} | \
-                 {mm.idx(w.x, w.y) for w in self.warp_spots} | \
-                 {mm.idx(w.x, w.y) for blk, (ws, _b, _z) in self.door_units.items() for w in ws}
+        return s, R
+
+    def _moving_warp_cells(self):
+        """cells of the warps that move with their blocks."""
+        mm = self.mm
+        return ({mm.idx(w.x, w.y) for blk, (ws, _b, _z) in self.warp_units.items() for w in ws} |
+                {mm.idx(w.x, w.y) for w in self.warp_spots} |
+                {mm.idx(w.x, w.y) for blk, (ws, _b, _z) in self.door_units.items() for w in ws})
+
+    def _lock_fixed(self):
+        """blocks that keep their vanilla layout because of what stands on them: warps that stay,
+        coord events, cutscene actors, doormats, map edges, buildings, signs, whirlpools, counters,
+        rocks over hidden items and Fly spots. Returns the set of locked blocks."""
+        mm = self.mm
+        moving = self._moving_warp_cells()
         # locked blocks: warps (those that do not move) and coord events
         lock = set()
         for c in [c for c in mm.warp_cells if c not in moving] + [mm.idx(e.x, e.y) for e in self.m.coord_events]:
@@ -157,6 +184,11 @@ class AnalysisMixin:
                 for dy in (-1, 0, 1):
                     n = (sx // 2 + dx, sy // 2 + dy)
                     if 0 <= n[0] < self.Wb and 0 <= n[1] < self.Hb: lock.add(n)
+        return lock
+
+    def _lock_scripted(self, lock):
+        """lock what scripts lay out on the vanilla map: objects they move, moveobject targets and
+        changeblock swaps."""
         # objects moved by scripts keep their place and surroundings; so do moveobject targets
         import re as _re
         src = self.m.script
@@ -201,6 +233,12 @@ class AnalysisMixin:
             for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)):
                 b = (bx + dx, by + dy)
                 if 0 <= b[0] < self.Wb and 0 <= b[1] < self.Hb: lock.add(b)
+
+    def _grow_lock(self, lock, s, R):
+        """grow the locked area over neighbouring gate structure, ledges and doorways, then keep it
+        as self.lock."""
+        mm, zg = self.mm, self.zg
+        moving = self._moving_warp_cells()
         # grow the locked area over neighbours that hold gate structure or several zones
         def blk_cells(bx, by): return [mm.idx(bx*2 + (q & 1), by*2 + (q >> 1)) for q in range(4)]
         def interesting(bx, by):
@@ -263,6 +301,10 @@ class AnalysisMixin:
         # (again, after every rule: a ledge tile in any locked block keeps its jump with it)
         self.ledge_close(lock)
         self.lock = lock
+
+    def _seal_broken_jumps(self):
+        mm, zg = self.mm, self.zg
+        lock = self.lock
         # vanilla's decorative ledges that jump into a wall sit in pockets you cannot reach: those
         # pockets stay sealed (their free neighbours stay wall: seal_edges / edges_ok), so a new
         # layout never opens a way to a broken jump
@@ -290,10 +332,14 @@ class AnalysisMixin:
                     if mm.inb(x + ex, y + ey):
                         n = mm.idx(x + ex, y + ey)
                         if n not in pocket and not locked_cell(n): self.edge_walls.add(n)
+
+    def _gate_zones(self, s, R):
+        """drop warp/door/sign units inside locked blocks, and collapse 1-cell gate-object zones
+        into gates. Returns the zone edges (a, b, requirement bits)."""
+        mm, zg, lock = self.mm, self.zg, self.lock
         for blk in [b for b in self.warp_units if b in lock]: del self.warp_units[blk]
         for blk in [b for b in self.door_units if b in lock]: del self.door_units[blk]
         for blk in [b for b in getattr(self, 'sign_units', {}) if b in lock]: del self.sign_units[blk]
-        self.warp_spots = [w for w in self.warp_spots if (w.x // 2, w.y // 2) not in lock or True]
         from maprando.model.zones import cell_edges
         self.cell_edges = cell_edges(mm, s)
         # cells holding a gate object (rock/boulder/conditional NPC) form 1-cell zones:
@@ -324,6 +370,12 @@ class AnalysisMixin:
                         edges.add((a, b, r | r2)); self.objz_pairs[(a, b)].add((g, r | r2))
         self.objz = objz
         self.Z = [z for z in self.Z if z not in objz]
+        return edges
+
+    def _pair_zones(self, edges):
+        """turn the edges between placeable zones into the pairs the generator builds (surf, ledge,
+        gate, waterfall, whirlpool), keeping vanilla's double gates in place."""
+        mm, zg = self.mm, self.zg
         # gates between placeable zones
         best = {}
         multi = defaultdict(set)     # (a, b) -> other gates that are not comparable with best
@@ -385,6 +437,12 @@ class AnalysisMixin:
                             other = best.get((y, x))
                             if other == 0: self.pairs.append(('gate', x, y, rr))
                             else: raise GenError(f'one-way gated edge {x}->{y}')
+
+    def _place_checks(self, R):
+        """which zone each check belongs to, NPCs and hidden items between two zones, and the pool
+        of gate objects."""
+        mm, zg = self.mm, self.zg
+        objz = self.objz
         # zone cell counts and anchors per zone
         self.size = {z: len(zg.zones[z]) for z in self.Z}
         self.anchor_zones = {}
