@@ -32,7 +32,6 @@ def stonetable(m):
     return [(consts.index(oc), int(w) - 1) for w, oc in re.findall(r'stonetable\s+(\d+),\s*(\w+)', src)]
 
 class BoulderRoom:
-    move_extras = True
     def __init__(self, d, m, perms, cat, base=None):
         self.d, self.m, self.perms, self.cat = d, m, perms, cat
         self.base = base or m
@@ -67,7 +66,7 @@ class BoulderRoom:
         # boulders with no hole of their own (Blackthorn Gym 2F has three): ScratchRoom moves them
         # too, so their blocks are not fixed there
         self.extras = [i for i, o in enumerate(m.objects) if 'BOULDER' in o.sprite and i not in boulder_idx
-                       and (o.x // 2, o.y // 2) in room] if self.move_extras else []
+                       and (o.x // 2, o.y // 2) in room]
         boulder_idx |= set(self.extras)
         events = [(w.x, w.y) for k, w in enumerate(m.warps) if k not in hw] + [(b.x, b.y) for b in m.bg_events] + \
                  [(o.x, o.y) for i, o in enumerate(m.objects) if i not in boulder_idx] + [(e.x, e.y) for e in m.coord_events]
@@ -244,12 +243,6 @@ class BoulderRoom:
         mm = self.mm
         return frozenset(c for c in mm.warp_cells if c not in hs and classify(mm, mm.coll[c]) == 'land')
 
-    def free_boulders(self, extra=None):
-        """cells of the boulders with no hole of their own (Blackthorn Gym 2F has three)."""
-        if extra is not None: return list(extra.values())
-        own = {i for i, _ in self.pairs}
-        return [self.mm.idx(o.x, o.y) for i, o in enumerate(self.base.objects)
-                if 'BOULDER' in o.sprite and i not in own and self.mm.inb(o.x, o.y)]
 
     def evaluate(self, pats, holes, boulders, extra=None):
         """(ok, score). boulders: the boulders with a hole, and (BoulderRoom) those with none, which
@@ -612,7 +605,6 @@ def bad_boulder_room(d, m, m2, perms, cat):
 
 
 class ScratchRoom(BoulderRoom):
-    move_extras = True
     """The boulder room built from scratch (solid rock first), backwards from the solution.
 
     The vanilla requirements say which holes and boulders need Strength to reach (in vanilla: the
@@ -719,7 +711,6 @@ class ScratchRoom(BoulderRoom):
             for q in range(4):
                 c = bx*2 + (q & 1) + (by*2 + (q >> 1)) * W
                 if c != hcell[w] and self.hole_pat[w][q] == '.': floor.add(c); tiles[c] = 'B' if w in gated_h else 'A'
-        def part_of(c): return tiles.get(c)
         # floor that is not part of the design (people's spots, the ways in) is the open part's:
         # the sealed part never touches it
         ffix = self._fixed_floor(holes) if self.extras else set()
@@ -856,8 +847,6 @@ class ScratchRoom(BoulderRoom):
             return cells, nbox, nbox
         return cells, box, None
 
-    def _tiles_any(self, part_other):
-        return getattr(self, '_any', None) or set(range(self.W * self.H))
 
     def _fixed_floor(self, holes):
         """floor that is not part of the design: fixed room blocks and the floor around the room."""

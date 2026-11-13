@@ -73,16 +73,3 @@ class ZoneGraph:
                 if c in self.zone_of: zs.add(self.zone_of[c])
             for z in zs: self.anchors[z].append(a.id)
 
-    def summary(self):
-        mm = self.mm
-        def lab(r):
-            names = [n for b, n in ABILITY_NAMES.items() if r & b] + [mm.obj_bits[b] for b in mm.obj_bits if r & b]
-            return '+'.join(names) or 'free'
-        lines = []
-        for z in sorted(self.zones):
-            cs = self.zones[z]
-            kind = 'water' if medium(mm, cs[0]) else 'land'
-            lines.append(f'  Z{z:<3d} {kind:5s} cells={len(cs):4d} anchors={self.anchors.get(z, [])}')
-        for za, zb, r in sorted(self.edges):
-            lines.append(f'    Z{za} -> Z{zb}  {lab(r)}')
-        return '\n'.join(lines)

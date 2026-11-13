@@ -17,23 +17,6 @@ def ir_ranges(ir_root):
             except (KeyError, TypeError): pass
     return rs
 
-def patched_events(rom_path, sym_path, ir_root, names):
-    """{map: {('bg'|'obj', index)}} for events whose coordinate bytes overlap an IR patch range."""
-    if not (os.path.exists(rom_path) and os.path.exists(sym_path) and os.path.isdir(ir_root)): return {}
-    rom = open(rom_path, 'rb').read(); sym = load_sym(sym_path); rs = sorted(ir_ranges(ir_root))
-    def hit(a, b):
-        return any(s < b and a < e for s, e in rs)
-    out = {}
-    for n in names:
-        at = sym.get(n + '_MapEvents')
-        if at is None: continue
-        bg, nbg, obj, nobj = events_layout(rom, at)
-        for i in range(nbg):
-            if hit(bg + i * BG, bg + i * BG + 2): out.setdefault(n, set()).add(('bg', i))
-        for i in range(nobj):
-            if hit(obj + i * OBJ + 1, obj + i * OBJ + 3): out.setdefault(n, set()).add(('obj', i))
-    return out
-
 
 def mode_patch_files(ir_root, mode_path):
     """NewGamePatches of every modifier a mode file selects (paths relative to ir_root)."""

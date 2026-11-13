@@ -25,7 +25,7 @@ class IceError(Exception): pass
 class IceGenerator:
     # objective 'shape': path_w * (slides on the quickest routes) - corner_cost * corners
     #                    - dead_end_cost * dead ends - rock_cost * rocks
-    objective = 'shape'       # or 'decisions' (nontrivial slides) / 'moves' (earlier objectives)
+    objective = 'shape'       # or 'decisions': the number of nontrivial slides (Ice Path 1F)
     path_w = 1.0
     corner_cost = 2.0    # per rock-made corner (an L-shaped pocket)
     dead_end_cost = 4.0  # per rock-made dead end (a U-shaped pocket)
@@ -380,13 +380,7 @@ class IceGenerator:
                 cn, de = self.shapes(g)
                 score = (self.path_w * sum(slides.get(k, 0) for k in pairs) - self.corner_cost * cn
                          - self.dead_end_cost * de - self.rock_cost * sum(p != 'IIII' for p in choice))
-            elif self.objective == 'slides':
-                # the slides on the quickest routes, and nothing else (a rock costs a hair, so only
-                # rocks that matter stay)
-                score = sum(slides.get(k, 0) for k in pairs) - 0.02 * sum(p != 'IIII' for p in choice)
-            elif self.objective == 'moves':     # the earlier objective, kept for comparison
-                score = sum(slides.get(k, 0) for k in pairs) - 0.6 * sum(p != 'IIII' for p in choice)
-            else:
+            else:   # 'decisions'
                 score = (sum(ch.get(k, 0) for k in pairs) + 0.02 * sum(slides.get(k, 0) for k in pairs)
                          - self.rock_cost * sum(p != 'IIII' for p in choice)
                          )
@@ -475,5 +469,3 @@ def traps(mm):
             if c in reach and c not in good: good.add(c); q.append(c)
     return reach - good
 
-def _sw(c):
-    return side_walls(c)

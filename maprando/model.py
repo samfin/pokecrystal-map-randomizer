@@ -335,25 +335,6 @@ def _edge_ok(disasm, perms, name, d, other, off, mm):
         if t[1] * w2 + t[0] in reach2: ok.add(c)
     return ok
 
-def _across(disasm, mm, d, other, off):
-    """edge cells of mm whose tile across the edge, in the connected map, can be walked onto
-    (or None if that map is unknown). The connected map is shifted by `off` blocks along the edge;
-    beyond its ends there is nothing to walk into (Route 9's south edge meets the 20-tile-wide
-    Route 10 North only at its last 20 tiles)."""
-    m2 = disasm.maps.get(other) if disasm is not None else None
-    if m2 is None or not m2.blocks: return None
-    ok = set()
-    if d in ('north', 'south'):
-        y, y2 = (0, m2.height * 2 - 1) if d == 'north' else (mm.h - 1, 0)
-        for x in range(mm.w):
-            c2 = _coll_at(disasm, m2, x - 2 * off, y2)
-            if c2 is not None and classify(mm, c2) is not None: ok.add(mm.idx(x, y))
-    else:
-        x, x2 = (0, m2.width * 2 - 1) if d == 'west' else (mm.w - 1, 0)
-        for y in range(mm.h):
-            c2 = _coll_at(disasm, m2, x2, y - 2 * off)
-            if c2 is not None and classify(mm, c2) is not None: ok.add(mm.idx(x, y))
-    return ok
 
 def edge_runs(mm, d, across=None):
     if d == 'north': cells = [mm.idx(x, 0) for x in range(mm.w)]

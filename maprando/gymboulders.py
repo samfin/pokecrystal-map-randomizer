@@ -32,11 +32,10 @@ class GymBoulderError(Exception):
 
 
 class BoulderGymScratch:
-    # classic: the earlier scoring (solution length and walls; no move count, no polishing among
-    # valid designs) - the one builds use (the move-count version is kept for later)
+    # classic: the search's scoring (solution length and walls); energy() counts exact submoves
+    # only when moves_of() asks for them. On HARD_MAPS the valid designs are then ranked by
+    # submoves and their boulders moved for more (harder)
     classic = True
-    # ...but the valid earlier designs are ranked by submoves, and their boulders moved for more
-    hardest = True
     HARD_MAPS = {'BlackthornGym2F'}     # (not Ice Path B1F's fallback)
     drop_k = K           # the exact count's weighting (pushes.K: moves first; 0: submoves only)
     hard_designs = 3     # distinct earlier designs whose boulders are moved
@@ -389,36 +388,26 @@ class BoulderGymScratch:
             t['objs'][i] = rng.choice(pool)
         return t
 
-    def anneal(self, rng, iters, enough=25, polish=800):
-        """search until valid designs appear, then polish: `polish` more steps among valid designs
-        only (an invalid step is never taken), for more boulder moves and a longer solution."""
+    def anneal(self, rng, iters, enough=25):
+        """search until `enough` distinct valid designs appear (or `iters` steps); the best first."""
         seen_ = set()
         s = self.random_state(rng)
         e, sc = self.energy(s)
         cur = e * 10 - (sc or 0)
         found = []
         T0, T1 = 30.0, 0.5
-        left = None                 # polishing steps left, once a valid design is in hand
         for it in range(iters):
-            if left is not None:
-                left -= 1
-                if left <= 0: break
-                T = 2.0 * left / polish + 0.2
-            else:
-                T = T0 * (T1 / T0) ** (it / iters)
+            T = T0 * (T1 / T0) ** (it / iters)
             t = self.mutate(s, rng)
             if t is None: continue
             e2, sc2 = self.energy(t)
-            if left is not None and e2: continue
             j = e2 * 10 - (sc2 or 0)
             if j <= cur or rng.random() < math.exp((cur - j) / T):
                 s, cur = t, j
                 if e2 == 0:
                     key = (tuple(sorted(t['pats'].items())), tuple(sorted(t['units'].items())), tuple(sorted(t['objs'].items())))
                     if key not in seen_: seen_.add(key); found.append((sc2, t))
-                    if self.classic:
-                        if len(found) >= enough: break
-                    elif left is None: left = polish
+                    if len(found) >= enough: break
         found.sort(key=lambda f: -f[0])
         return found[:enough]
 
@@ -501,7 +490,7 @@ class BoulderGymScratch:
         for k in range(chains):
             found += self.anneal(random.Random(f'{seed}-{self.m.name}-{k}'), iters)
         found.sort(key=lambda f: -f[0])
-        if self.classic and self.hardest and self.m.name in self.HARD_MAPS:
+        if self.classic and self.m.name in self.HARD_MAPS:
             # the earlier designs, the hardest first: submoves (runs of one boulder's pushes in one
             # direction), then the earlier score
             ranked, keys = [], set()

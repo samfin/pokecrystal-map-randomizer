@@ -168,14 +168,11 @@ def generate_cave(d, m, perms, cat, seed, tries):
             else: g.allow_split = False
 
 class CaveGenerator:
-    use_corridors = True
-    move_warps = True
     best_of = 3
     far_links = True
     @property
     def freq_w(self): return 2.0 if self.route else 0.7
     room = 3.0
-    alternate = False    # True: every other try skips the free-space share (best-of keeps the longer walk)
     fill = 0.8      # share of the free blocks land zones may claim before thinning
 
     def __init__(self, disasm, m, perms, catalog):
@@ -700,7 +697,6 @@ class CaveGenerator:
         from .model import _read_src
         if m.asm_path and _re.search(r'VAR_[XY]COORD', _read_src(m.asm_path)):
             self.warp_spot_zone = {}; return
-        if not self.move_warps: return
         near = set()
         for x, y in ([(e.x, e.y) for e in m.coord_events] + [(b.x, b.y) for b in m.bg_events] +
                      [(o.x, o.y) for o in m.objects] + list(getattr(self.d, 'spawns', {}).get(m.name, []))):
@@ -1081,18 +1077,17 @@ class CaveGenerator:
         for p in self.cycle_pairs:
             if p[0] == 'surf' and self.touches(p[1], p[2]): continue
             if not self.link2(p, rng): late.append(p)
-        if self.use_corridors:
-            # land will be thinned into corridors: give it room to wind first
-            for z in self.Z:
-                if self.kind[z] == 'land': self.target[z] = round(self.target[z] * self.room_now)
-            if self.room_now > 1 and self.fill_now:
-                # small areas on a big empty map: claim a share of the free blocks (split by vanilla
-                # size) so the corridors have space to wind through, not just vanilla's area x3
-                land = [z for z in self.Z if self.kind[z] == 'land']
-                tot = sum(self.size[z] for z in land) or 1
-                free = self.Wb * self.Hb - len(self.lock)
-                for z in land:
-                    self.target[z] = max(self.target[z], round(self.fill * free * self.size[z] / tot))
+        # land will be thinned into corridors: give it room to wind first
+        for z in self.Z:
+            if self.kind[z] == 'land': self.target[z] = round(self.target[z] * self.room_now)
+        if self.room_now > 1:
+            # small areas on a big empty map: claim a share of the free blocks (split by vanilla
+            # size) so the corridors have space to wind through, not just vanilla's area x3
+            land = [z for z in self.Z if self.kind[z] == 'land']
+            tot = sum(self.size[z] for z in land) or 1
+            free = self.Wb * self.Hb - len(self.lock)
+            for z in land:
+                self.target[z] = max(self.target[z], round(self.fill * free * self.size[z] / tot))
         self.grow(rng)
         for z in self.Z:
             self.unify(z, rng)
@@ -1138,7 +1133,7 @@ class CaveGenerator:
             dirs = [d for d in D4 if (-d[0], -d[1]) in ok_d]   # entering from the src side
             if not dirs: return False
         elif t == 'gate' and not self.take_gate_object(bits, dry=True): return False
-        far = self.use_corridors and self.far_links
+        far = self.far_links
         found = []          # (depth, P, d, X, D)
         while q:
             P, side = q.popleft()
@@ -2316,12 +2311,6 @@ class CaveGenerator:
         # walls of a nook must stay solid: wall or headbutt trees, never passable void
         return any(self.cat.has(p) for p in (pat, tuple('H' if c == '#' else c for c in pat)))
 
-    def _vanilla_nook(self, b):
-        """is a hidden item's vanilla spot already the tip of a one-tile dead end?"""
-        mm = self.mm
-        if not mm.inb(b.x, b.y) or classify(mm, mm.coll[mm.idx(b.x, b.y)]) is None: return False
-        return sum(1 for dx, dy in D4 if mm.inb(b.x + dx, b.y + dy)
-                   and open_tile(mm, mm.idx(b.x + dx, b.y + dy))) == 1
 
     def make_nook(self, z, used, locked_cells, rng, terrain='.'):
         """Turn a floor tile of zone z into a nook tip by walling up all but one of its open
@@ -2701,8 +2690,6 @@ class CaveGenerator:
             # long connections first; nearest ones once they keep failing (or half the tries are gone)
             self.far_links = k <= tries // 2 and pair_fails < 20
             self.room_now = self.room if k <= tries * 3 // 4 else 1.0   # crowded maps: vanilla-sized areas last
-            # alternate tries with and without the free-space share: best-of keeps whichever walks longer
-            self.fill_now = self.fill if (k % 2 or not self.alternate) else 0.0
             self.gate_pool = defaultdict(list)
             for cell, (kind, bits, o) in self.mm.objects.items():
                 if kind == 'bits' and ((o.x // 2, o.y // 2) not in self.lock): self.gate_pool[bits].append(o)
@@ -2748,13 +2735,13 @@ class CaveGenerator:
                         for c in self.zg.zones[ue.z]:
                             self.lock.add(((c % mm.w) // 2, (c // mm.w) // 2))
                     raise
-                if self.use_corridors: self.corridors(rng)
+                self.corridors(rng)
                 self.place_warps(rng)
                 self.widen_ledges(rng)
                 self.build_plan(rng)
                 self.fixed |= getattr(self, 'door_below', set())
                 self.erode(rng, check_only=True)
-                if not (self.route and self.use_corridors):
+                if not self.route:
                     # routes keep block-aligned corridors: Johto has hardly any half-tree blocks,
                     # so ragged edges would be drawn as cliffs and fences
                     self.erode(rng)
@@ -3137,105 +3124,6 @@ class CaveGenerator:
             self.__dict__.pop(c_, None)
         return dict(zone=z, parts=k, sizes=[len(zg.zones[nz]) for nz in new], ids=new)
 
-    def add_ledges(self, rng):
-        """one-way shortcuts, as vanilla's ledge routes have: where a wall one block thick has
-        walkable ground on both sides, and both sides are already joined the long way round, part
-        of the wall becomes a ledge (drop down easily, walk all the way round to get back). Both
-        sides joined means the ledge adds no new way anywhere, so the requirements stay the same
-        (verify checks; on failure the layout is kept without them). As many ledge runs as vanilla
-        has (roughly), longest detours first. Returns the sum of the detours."""
-        mm = self.mm
-        n_v = sum(1 for c in mm.coll if (c & 0xF0) == 0xA0)
-        if not n_v: return 0
-        target = min(8, max(2, n_v // 8))
-        pats = {d: p for d, p in LEDGE_PATTERNS.items() if self.cat.has(p)}
-        if not pats: return 0
-        Wb, Hb = self.Wb, self.Hb
-        W, H = Wb * 2, Hb * 2
-        blocks = bytearray(self.m2.blocks)
-        def cls(x, y):
-            if not (0 <= x < W and 0 <= y < H): return '#'
-            return self.cat.pattern[blocks[(y // 2) * Wb + x // 2]][(y % 2) * 2 + x % 2]
-        def walk(x, y): return cls(x, y) in ('.', ',')
-        busy = {(o.x // 2, o.y // 2) for o in self.m2.objects} | {(b.x // 2, b.y // 2) for b in self.m2.bg_events} | \
-               {(w.x // 2, w.y // 2) for w in self.m2.warps}
-        def free_wall(bx, by):
-            if not (0 < bx < Wb - 1 and 0 < by < Hb - 1): return False
-            if (bx, by) in self.lock or (bx, by) in busy or (bx, by) in getattr(self, 'cut_ids', {}): return False
-            if isinstance(self.G[by][bx], tuple) and self.G[by][bx][0] == 'WB': return False
-            return all(c == '#' for c in self.cat.pattern[blocks[by * Wb + bx]])
-        def bfs(a, b, avoid):
-            if not (walk(*a) and walk(*b)): return None
-            dist = {a: 0}; q = deque([a])
-            while q:
-                c = q.popleft()
-                if c == b: return dist[c]
-                for dx, dy in D4:
-                    n = (c[0] + dx, c[1] + dy)
-                    if n not in dist and n not in avoid and walk(*n): dist[n] = dist[c] + 1; q.append(n)
-            return None
-        # candidates: a ledge right across a corridor (a run of floor blocks with wall at both
-        # ends), with ground beyond it on both sides; the corridor must be part of a loop, so
-        # the way back round exists without it
-        def floor_blk(bx, by):
-            if not (0 < bx < Wb - 1 and 0 < by < Hb - 1): return False
-            if (bx, by) in self.lock or (bx, by) in busy or (bx, by) in getattr(self, 'cut_ids', {}): return False
-            if isinstance(self.G[by][bx], tuple) and self.G[by][bx][0] == 'WB': return False
-            return all(c == '.' for c in self.cat.pattern[blocks[by * Wb + bx]])
-        def wallish(x, y): return not walk(x, y)
-        cands = []
-        if (0, 1) in pats:
-            for by in range(1, Hb - 1):
-                bx = 1
-                while bx < Wb - 1:
-                    run = []
-                    while bx < Wb - 1 and floor_blk(bx, by): run.append((bx, by)); bx += 1
-                    if 1 <= len(run) <= 5:
-                        x0, x1 = run[0][0] * 2, run[-1][0] * 2 + 1
-                        ends = all(wallish(x0 - 1, y) and wallish(x1 + 1, y) for y in (by * 2, by * 2 + 1))
-                        above = all(walk(x, by * 2 - 1) for x in range(x0, x1 + 1))
-                        below = all(walk(x, by * 2 + 2) for x in range(x0, x1 + 1))
-                        if ends and above and below: cands.append(((0, 1), run))
-                    bx += 1
-        for d in ((1, 0), (-1, 0)):
-            if d not in pats: continue
-            for bx in range(1, Wb - 1):
-                by = 1
-                while by < Hb - 1:
-                    run = []
-                    while by < Hb - 1 and floor_blk(bx, by): run.append((bx, by)); by += 1
-                    if 1 <= len(run) <= 4:
-                        y0, y1 = run[0][1] * 2, run[-1][1] * 2 + 1
-                        ends = all(wallish(x, y0 - 1) and wallish(x, y1 + 1) for x in (bx * 2, bx * 2 + 1))
-                        xa, xb = (bx * 2 - 1, bx * 2 + 2) if d == (1, 0) else (bx * 2 + 2, bx * 2 - 1)
-                        side = all(walk(xa, y) and walk(xb, y) for y in range(y0, y1 + 1))
-                        if ends and side: cands.append((d, run))
-                    by += 1
-        scored = []
-        for d, run in cands:
-            bx, by = run[0]
-            if d == (0, 1): a, b = (bx * 2, by * 2 - 1), (bx * 2, by * 2 + 2)
-            elif d == (1, 0): a, b = (bx * 2 - 1, by * 2), (bx * 2 + 2, by * 2)
-            else: a, b = (bx * 2 + 2, by * 2), (bx * 2 - 1, by * 2)
-            cut = {(x * 2 + q % 2, y * 2 + q // 2) for (x, y) in run for q in range(4)}
-            det = bfs(b, a, cut)            # the way back, round the loop, without the ledge's corridor
-            if det is None or det < 12: continue
-            scored.append((det + rng.random(), d, run, det))
-        scored.sort(key=lambda t: -t[0])
-        used, total, made = set(), 0, 0
-        for _, d, run, det in scored:
-            if made >= target: break
-            if any((x + dx, y + dy) in used for (x, y) in run for dx in (-1, 0, 1) for dy in (-1, 0, 1)): continue
-            pat = pats[d]
-            for (bx, by) in run:
-                i = by * Wb + bx
-                left = blocks[i - 1]; up = blocks[i - Wb]
-                b = self.cat.choose(pat, left, up, rng)
-                if b is None: break
-                blocks[i] = b
-            used |= set(run); total += det; made += 1
-        self.m2.blocks = bytes(blocks)
-        return total
 
     def widen_ledges(self, rng):
         """the ledges of a ledge loop are drawn as long ledges, not one-block gates: each loop

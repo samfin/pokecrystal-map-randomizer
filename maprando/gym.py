@@ -63,9 +63,9 @@ class GymGenerator:
         self.cat = catalog_for(d, m, perms, cache)
         self.cave = CaveGenerator(d, m, perms, self.cat)      # locks and the verifier
         # a Strength gate is a puzzle: optimize_gate checks its solution and traps push by push
-        # (puzzle_gate: Cianwood's gate redesigned for the most boulder moves - kept for later; off,
-        # so the gate boulders are spread by gate_spot and checked by the usual boulder check)
-        self.cave.puzzle_checked = self.puzzle_gate and any('BOULDER' in o.sprite for o in m.objects)
+        # a Strength gate (Cianwood) is checked push by push in generate (gym_puzzle), not by the
+        # cave's usual boulder check
+        self.cave.puzzle_checked = any('BOULDER' in o.sprite for o in m.objects)
         # zones are the cave generator's plan; a gym is one walkable area, and the matrix plus
         # people_ok already ask that everything stays reachable
         self.cave.zones_reachable = lambda mm2: None
@@ -250,29 +250,10 @@ class GymGenerator:
         if not place: return s, None, info
         rng = rng or random.Random(0)
         ways = set(path) | set(path2)
-        if not self.gate:
-            pl = self.place(g, dist, ways, rng, self.units, self.others, set(self.leader_front))
-            if pl is None: return None
-            pos, watched = pl
-        else:
-            gr = self.gate_spot(g, dist, path, rng, walk, bfs)
-            if gr is None: return None
-            gpos, outer, inner_c, push = gr
-            # nobody stands within two tiles of a boulder (room to push it from and into)
-            near_b = {(b[0] + dx, b[1] + dy) for b in gpos.values() for dx in range(-2, 3) for dy in range(-2, 3)
-                      if abs(dx) + abs(dy) <= 2}
-            ways_o = (ways | near_b) & set(outer); ways_i = (ways | near_b) & set(inner_c)
-            out_units = [u for u in self.units if u[0].index not in self.inner_objs]
-            in_units = [u for u in self.units if u[0].index in self.inner_objs]
-            # people outside keep the push spot free; people inside keep the leader reachable
-            pl = self.place(g, outer, ways_o | {push}, rng, out_units,
-                            [o for o in self.others if o.index not in self.inner_objs], {push})
-            if pl is None: return None
-            pos, watched = pl
-            pl = self.place(g, inner_c, ways_i, rng, in_units,
-                            [o for o in self.others if o.index in self.inner_objs], set(self.leader_front))
-            if pl is None: return None
-            pos.update(pl[0]); watched += pl[1]; pos.update(gpos)
+        # (a gym with a Strength gate places its people in optimize_gate, never here)
+        pl = self.place(g, dist, ways, rng, self.units, self.others, set(self.leader_front))
+        if pl is None: return None
+        pos, watched = pl
         info['watched'] = watched
         if lead_at is not None: pos[self.leader.index] = lead_at
         if getattr(self, 'maze', False):
@@ -287,102 +268,6 @@ class GymGenerator:
             s += self.W_WALK * (min(walkp, self.walk_cap) - min(walk_len, self.walk_cap)) - self.W_UNREACH * lost
         return s + self.W_WATCH * watched, pos, info
 
-    @staticmethod
-    def gate_pushable(floor, cells):
-        """boulders.bad_boulders on the plan: the gate boulders work as one group; from every side
-        it can be walked up to, some push of some boulder opens the way to every area around it."""
-        def comp(fr, start):
-            seen = {start}; st = [start]
-            while st:
-                a = st.pop()
-                for dx, dy in D4:
-                    n = (a[0] + dx, a[1] + dy)
-                    if n in fr and n not in seen: seen.add(n); st.append(n)
-            return seen
-        cs = set(cells)
-        free = floor - cs
-        sides = [((b[0] + dx, b[1] + dy), b, (dx, dy)) for b in cells for dx, dy in D4 if (b[0] + dx, b[1] + dy) in free]
-        areas = {}
-        for n, b, d in sides: areas.setdefault(frozenset(comp(free, n)), []).append((n, b, d))
-        if len(areas) <= 1: return True
-        everything = set().union(*areas)
-        for area, ns in areas.items():
-            good = False
-            for n, b, (dx, dy) in ns:
-                for k in range(1, 8):
-                    t = (b[0] - dx * k, b[1] - dy * k)
-                    if t not in free: break
-                    if (everything - {t}) <= comp((free | {b}) - {t}, n): good = True; break
-                if good: break
-            if not good: return False
-        return True
-
-    def gate_spot(self, g, dist, path, rng, walk, bfs):
-        """where the gate boulders go: each on its own cell (touching ones work as a group), so that
-        with them in place the way to the leader is shut and some boulder can be pushed from
-        outside into free floor inside (generate then moves them for the most boulder moves). The first
-        stands on the way to the leader; the others anywhere on the floor (another gap, the way
-        itself, or just in the way). Returns ({index: cell}, outer reach, inner reach, push-from
-        cell) or None."""
-        unit = sorted(self.gate, key=lambda o: (o.y, o.x))
-        k = len(unit)
-        fr = set(self.leader_front)
-        cand = [c for c in dist if c not in self.fixed and c not in self.near_door]
-        pth = [c for c in path if c not in self.fixed and c not in self.near_door]
-        if not pth: return None
-        opts, seen = [], set()
-        for t in range(160):
-            cells = [rng.choice(pth)]
-            tries = 0
-            while len(cells) < k and tries < 50:
-                tries += 1
-                r = rng.random()
-                if r < 0.35:      # beside one already placed (a short row or an L)
-                    b0 = rng.choice(cells); dx, dy = rng.choice(D4); c = (b0[0] + dx, b0[1] + dy)
-                elif r < 0.6: c = rng.choice(pth)
-                else: c = rng.choice(cand)
-                if c in cells or c not in dist or c in self.fixed or c in self.near_door: continue
-                cells.append(c)
-            if len(cells) < k: continue
-            key = frozenset(cells)
-            if key in seen: continue
-            seen.add(key)
-            avoid = set(cells)
-            d0, _ = bfs(self.starts, avoid=avoid)
-            if fr & set(d0): continue                     # does not gate anything
-            di, _ = bfs([x for x in fr if x in dist], avoid=avoid)
-            # a push: stand outside, boulder moves one cell inward onto free floor
-            push = None
-            for b in cells:
-                for dx, dy in D4:
-                    p_ = (b[0] - dx, b[1] - dy); t_ = (b[0] + dx, b[1] + dy)
-                    if p_ in d0 and t_ in di and t_ not in avoid:
-                        push = p_; break
-                if push: break
-            if push is None: continue
-            # touching boulders work as one group; each group must open from every side
-            groups, left = [], set(cells)
-            while left:
-                st = [left.pop()]; grp = set(st)
-                while st:
-                    c = st.pop()
-                    for dx, dy in D4:
-                        n = (c[0] + dx, c[1] + dy)
-                        if n in left: left.discard(n); grp.add(n); st.append(n)
-                groups.append(grp)
-            # (the other boulders are walls, as in the final check)
-            if not all(self.gate_pushable(set(dist) - (avoid - grp), grp) for grp in groups): continue
-            # every cell is outside or inside (nothing only the boulder cells reach)
-            if len(set(d0) | set(di)) + len(cells) < len(dist): continue
-            opts.append((len(di), rng.random(), cells, d0, di, push))
-            if len(opts) >= 8: break
-        if not opts: return None
-        # a roomy inside (the people behind the gate need space) but not the whole gym
-        half = len(dist) / 2
-        opts.sort(key=lambda t: (-abs(t[0] - half * 0.6), t[1]), reverse=True)
-        _, _, cells, d0, di, push = opts[0]
-        rng.shuffle(cells)
-        return {o.index: x for o, x in zip(unit, cells)}, d0, di, push
 
     # ------------------------------------------------------------------ people
     def place(self, g, dist, ways, rng, units, others, goal):
@@ -543,9 +428,9 @@ class GymGenerator:
         W2, H2 = self.W2, self.H2
         g = [row[:] for row in self.van]
         for (x, y) in self.free_tiles: g[y][x] = '.'
-        # a Strength gate's boulders are part of the search (joint_gate): every step is scored with
-        # the submoves its gate needs; people are placed after the search (optimize_gate)
-        joint = self.gate and self.joint_gate
+        # a Strength gate's boulders are part of the search: every step is scored with the submoves
+        # its gate needs; people are placed after the search (optimize_gate)
+        joint = bool(self.gate)
         if joint:
             memo = {}
             fl = [(x, y) for (x, y) in self.free_tiles if (x, y) not in self.near_door and (x, y) not in self.leader_front]
@@ -554,7 +439,7 @@ class GymGenerator:
                 if not r_: return -1e9, r_
                 sub = self.gate_submoves(g, bl, memo)
                 if sub is None: return -1e9, None
-                lone = self.lone_boulders(bl) if self.gate_touch else 0
+                lone = self.lone_boulders(bl)
                 return (r_[0] + self.joint_w * sub - self.joint_lone * lone,
                         (r_[0], dict(bl), dict(r_[2], submoves=sub, lone=lone)))
         cur_r = self.score(g, place=self.place_in_search, rng=random.Random(0))
@@ -571,7 +456,7 @@ class GymGenerator:
                         and c not in self.near_door and c not in self.leader_front]
                 near = [c for c in cand if abs(c[0] - c0[0]) + abs(c[1] - c0[1]) <= 3]
                 if not cand: continue
-                bes = self.beside_others(i, bl, cand) if self.gate_touch and rng.random() < 0.5 else []
+                bes = self.beside_others(i, bl, cand) if rng.random() < 0.5 else []
                 bl[i] = rng.choice(bes or (near if near and rng.random() < 0.7 else cand))
                 sc, rr = total(self.score(g, place=self.place_in_search, rng=random.Random(it)))
                 if sc >= cur or rng.random() < math.exp((sc - cur) / T):
@@ -663,23 +548,14 @@ class GymGenerator:
                 out[by * self.W + bx] = max(self.pats[p], key=lambda b: (own.score(b, p, n, fw=0.7), -b))
         return bytes(out)
 
-    W_MOVES = 12.0
-    puzzle_gate = True
-    # ...moving the gate boulders only: the layout stays the earlier design (walls flipped too was
-    # the version that made dull gyms)
-    gate_walls = False
-    gate_layouts = 4       # layouts whose boulders are moved
-    # the gate boulders designed with the walls, in the layout search itself (else placed after it)
-    joint_gate = True
+    # Strength gate (Cianwood): the gate boulders are designed with the walls in the layout search
+    W_MOVES = 12.0         # optimize_gate: score per submove
+    gate_layouts = 4       # layouts whose boulders are polished (optimize_gate)
     joint_w = 16.0         # layout score per submove the gate needs
     joint_move = 0.3       # share of search steps that move a boulder
     joint_polish = 1500    # boulder-only steps on the search's best designs
-    # every gate boulder touches another (8 ways); the search counts `joint_lone` per lone one
-    gate_touch = True
-    joint_lone = 12.0
-    gate_evals = 8000      # boulder steps per layout
+    joint_lone = 12.0      # every gate boulder touches another (8 ways): penalty per lone one
     gate_limit = 12000     # solver positions per design
-    W_SUB = 1.0        # submoves (runs of pushes in one direction within a move): a tiebreak
 
     @staticmethod
     def lone_boulders(cells):
@@ -770,12 +646,12 @@ class GymGenerator:
             key = (gk, frozenset(cells.values()))
             if key in memo: return memo[key]
             out = None
-            if r is not None and not (self.gate_touch and self.lone_boulders(cells)):
+            if r is not None and not self.lone_boulders(cells):
                 fr = [t for t in self.leader_front if t in dist]
                 if fr and all(c in dist for c in cells.values()):
                     mv = min_moves(W2, {idx(c) for c in dist}, {i: idx(c) for i, c in cells.items()},
                                    [idx(c) for c in self.starts if c in dist], [idx(c) for c in fr], limit=self.gate_limit,
-                                   detail=True, weight=K if self.gate_walls else 0)
+                                   detail=True, weight=0)
                     # (submoves only: the fewest runs of one boulder pushed one way, whatever the moves)
                     if mv is not None and mv[1] >= 1: out = (mv[0] or 0, mv[1], r[0])
             memo[key] = out
@@ -784,42 +660,26 @@ class GymGenerator:
         if len(cur) < len(ids): return None
         cv = ev(cur)
         if cv is None: return None
-        # submoves only (runs of one boulder's pushes in one direction) when the walls stay put
-        J = ((lambda v: self.W_MOVES * v[1]) if not self.gate_walls
-             else (lambda v: self.W_MOVES * v[0] + self.W_SUB * v[1] + v[2]))
+        # submoves: runs of one boulder's pushes in one direction
+        J = lambda v: self.W_MOVES * v[1]
         cj = J(cv)
         keep = [(cv, [row[:] for row in g], dict(cur))]
         T0 = 6.0
         for it in range(evals):
             T = T0 * (1 - it / evals) + 0.3
-            if self.gate_walls and rng.random() < 0.55:
-                x, y = rng.choice(self.free_tiles)
-                if (x, y) in self.must_floor or (x, y) in cur.values(): continue
-                old = g[y][x]
-                g[y][x] = '#' if old == '.' else '.' if old == '#' else old
-                if g[y][x] == old or not self.drawable(g, {(x // 2, y // 2)}):
-                    g[y][x] = old; continue
-                v = ev(cur)
-                if v is not None and (J(v) >= cj or rng.random() < math.exp((J(v) - cj) / T)):
-                    cv, cj = v, J(v); keep.append((cv, [row[:] for row in g], dict(cur)))
-                else: g[y][x] = old
-            else:
-                i = rng.choice(ids); c0 = cur[i]
-                d_ = layout_of()[1][1]
-                if d_ is None: continue
-                cand = [c for c in d_ if c not in self.fixed and c not in self.near_door
-                        and c not in self.leader_front and c not in cur.values()]
-                near = [c for c in cand if abs(c[0] - c0[0]) + abs(c[1] - c0[1]) <= 3]
-                if not cand: continue
-                bes = self.beside_others(i, cur, cand) if self.gate_touch and rng.random() < 0.5 else []
-                nxt = dict(cur); nxt[i] = rng.choice(bes or (near if near and rng.random() < 0.7 else cand))
-                v = ev(nxt)
-                if v is not None and (J(v) >= cj or rng.random() < math.exp((J(v) - cj) / T)):
-                    cur, cv, cj = nxt, v, J(v); keep.append((cv, [row[:] for row in g], dict(cur)))
-        keep.sort(key=(lambda t: (-t[0][1], -t[0][2])) if not self.gate_walls else (lambda t: (-t[0][0], -t[0][1], -t[0][2])))
-        if getattr(self, 'debug_gate', False):
-            from collections import Counter
-            print('  found', Counter(k_[0][:2] for k_ in keep).most_common(8))
+            i = rng.choice(ids); c0 = cur[i]
+            d_ = layout_of()[1][1]
+            if d_ is None: continue
+            cand = [c for c in d_ if c not in self.fixed and c not in self.near_door
+                    and c not in self.leader_front and c not in cur.values()]
+            near = [c for c in cand if abs(c[0] - c0[0]) + abs(c[1] - c0[1]) <= 3]
+            if not cand: continue
+            bes = self.beside_others(i, cur, cand) if rng.random() < 0.5 else []
+            nxt = dict(cur); nxt[i] = rng.choice(bes or (near if near and rng.random() < 0.7 else cand))
+            v = ev(nxt)
+            if v is not None and (J(v) >= cj or rng.random() < math.exp((J(v) - cj) / T)):
+                cur, cv, cj = nxt, v, J(v); keep.append((cv, [row[:] for row in g], dict(cur)))
+        keep.sort(key=lambda t: (-t[0][1], -t[0][2]))
         tried = set()
         for (mv, sub, ls), gg, cells in keep:
             key = (tuple(''.join(r) for r in gg), frozenset(cells.values()))
@@ -855,7 +715,6 @@ class GymGenerator:
             ppl = {idx(c) for i, c in pos.items()}
             tr = player_traps(W2, Fi - ppl, frozenset(), set(), {}, bi, starts_i, set(starts_i), limit=60000)
             if tr is None or tr[1]:
-                if getattr(self, 'debug_gate', False): print('  trap', (mv, sub), tr and tr[1])
                 continue
             pos.update(cells)
             return (mv, sub), tuple(tuple(r) for r in g), pos
@@ -870,7 +729,7 @@ class GymGenerator:
         found.sort(key=lambda t: -t[0])
         seen, last = set(), None
         rng = random.Random(f'{seed}-{self.m.name}-draw')
-        if not self.place_in_search and not (self.gate and self.puzzle_gate):
+        if not self.place_in_search and not self.gate:
             # people on the best layouts, then the layouts ranked again with them
             full = []
             for s_, g_, r_ in found:
@@ -882,7 +741,7 @@ class GymGenerator:
             full.sort(key=lambda t: -t[0])
             found = full
             seen = set()
-        if self.gate and self.puzzle_gate:
+        if self.gate:
             # a Strength gate: the boulders of the best few layouts are moved for the most boulder
             # moves; layouts are then tried most moves first
             opt, tries_ = [], 0
@@ -890,20 +749,15 @@ class GymGenerator:
                 if g_ in seen: continue
                 seen.add(g_)
                 if len(opt) >= self.gate_layouts or len(seen) > 20 or tries_ >= self.gate_layouts + 3: break
-                if self.joint_gate:
-                    # the boulders the search designed with the layout (then polished a little)
-                    rf = (s_, r_[1], r_[2])
-                else:
-                    # a first gate placement for the layout (the search scored the layout alone)
-                    rf = self.score(g_, rng=random.Random(f'{seed}-{self.m.name}-gate-{len(seen)}'))
-                if rf is None: continue
+                # the boulders the search designed with the layout, then polished a little
+                rf = (s_, r_[1], r_[2])
                 tries_ += 1
                 o_ = self.optimize_gate(g_, rf[1], random.Random(f'{seed}-{self.m.name}-boulders-{len(seen)}'),
-                                        evals=self.joint_polish if self.joint_gate else self.gate_evals)
+                                        evals=self.joint_polish)
                 if o_ is None: continue
                 mvt, g2, pos = o_
                 opt.append((mvt, s_, g2, (s_, pos, dict(rf[2], moves=mvt[0], submoves=mvt[1]))))
-            opt.sort(key=(lambda t: (-t[0][1], -t[1])) if not self.gate_walls else (lambda t: (-t[0][0], -t[0][1], -t[1])))
+            opt.sort(key=lambda t: (-t[0][1], -t[1]))
             found = [(s_, g_, r_) for mv, s_, g_, r_ in opt]
             seen = set()
         for s, g, r in found:
@@ -922,9 +776,8 @@ class GymGenerator:
                 from .pushes import gym_puzzle
                 mv, st, tr = gym_puzzle(self.d, m2, self.perms)
                 if mv is None or st is None or tr: ok, why = False, f'Strength puzzle: moves {mv}, traps {tr} of {st}'
-                elif self.gate_touch and self.lone_boulders(self.gate_cells(m2)):
+                elif self.lone_boulders(self.gate_cells(m2)):
                     ok, why = False, 'a gate boulder touches no other'
-            if getattr(self, 'debug', False): print('  cand', round(s, 1), r[2], ok, str(why)[:100])
             if ok:
                 self.m2, self.info = m2, dict(r[2], score=round(s, 1))
                 return m2
