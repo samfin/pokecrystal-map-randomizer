@@ -3,6 +3,37 @@ from collections import defaultdict, deque
 from maprando.generators.caves.common import D4, UnifyError
 
 
+
+def _cut_vertices(nb, alive):
+    """articulation points of the graph nb (adjacency lists) among the alive nodes (Tarjan,
+    iterative)."""
+    N = len(nb)
+    disc = [-1] * N; low = [0] * N; cut = set(); t = 0
+    for root in range(N):
+        if not alive[root] or disc[root] >= 0: continue
+        disc[root] = low[root] = t; t += 1
+        st = [(root, -1, iter(nb[root]))]; kids = 0
+        while st:
+            u, par, it = st[-1]
+            v = next(it, None)
+            if v is None:
+                st.pop()
+                if st:
+                    pu = st[-1][0]
+                    if low[u] < low[pu]: low[pu] = low[u]
+                    if st[-1][1] != -1 and low[u] >= disc[pu]: cut.add(pu)
+                continue
+            if v == par or not alive[v]: continue
+            if disc[v] >= 0:
+                if disc[v] < low[u]: low[u] = disc[v]
+            else:
+                disc[v] = low[v] = t; t += 1
+                if u == root: kids += 1
+                st.append((v, u, iter(nb[v])))
+        if kids > 1: cut.add(root)
+    return cut
+
+
 class CorridorMixin:
     """Corridors: land zones thinned into winding paths, and zones joined through them."""
     def corridors(self, rng, samples=6):
@@ -12,236 +43,195 @@ class CorridorMixin:
         removal that lengthens the walks between terminals the most. What is left is a tree of
         one-block-wide corridors with walls between them; water zones stay open."""
         self.pockets = set()
-        mm, W = self.mm, self.mm.w
         surf = [(a, b) for t, a, b, _ in self.pairs if t == 'surf']
-        held = defaultdict(int)
+        held = defaultdict(int)     # things that stand in each zone (each gets a pocket)
         for aid, zs in self.anchor_zones.items():
             if len(zs) == 1 and (aid.startswith('obj:') or aid.startswith('bg:')): held[next(iter(zs))] += 1
-        def blk(c): return ((c % W) // 2, (c // W) // 2)
         for z in self.Z:
-            if self.kind[z] != 'land': continue
-            R = {b for b in self.region[z] if self.G[b[1]][b[0]] == ('Z', z)}
-            if len(R) < 3: continue
-            if len(self.components(z)) != 1: continue
-            # pieces of z inside locked blocks: strongly connected under vanilla moves there
-            # (ledges are one way), plus the one-way links between pieces
-            lc = {c for c in self.zg.zones[z] if blk(c) in self.lock}
-            ladj = {c: [d for d, r in self.cell_edges.get(c, ()) if d in lc] for c in lc}
-            piece = {}
-            for i, comp in enumerate(self._scc(lc, ladj)):
-                for c in comp: piece[c] = ('P', i)
-            plink = defaultdict(set)
-            for c in lc:
-                for d in ladj[c]:
-                    if piece[c] != piece[d]: plink[piece[c]].add(piece[d])
-            # graph: region blocks + lock pieces; terminals
-            ext = defaultdict(set)     # region block -> lock-piece nodes it opens onto
-            T = set()
-            for b in R:
-                for dx, dy in D4:
-                    n = (b[0] + dx, b[1] + dy)
-                    if not self.inb(*n): continue
-                    g = self.G[n[1]][n[0]]
-                    if g == 'LOCK':
-                        side = (-dx, -dy)
-                        for q in range(4):
-                            qx, qy = q & 1, q >> 1
-                            if (side[0] == 1 and qx == 1) or (side[0] == -1 and qx == 0) or \
-                               (side[1] == 1 and qy == 1) or (side[1] == -1 and qy == 0):
-                                c = mm.idx(n[0] * 2 + qx, n[1] * 2 + qy)
-                                if c in piece: ext[b].add(piece[c]); T.add(b)
-                        if z in self.lock_side_zones(n[0], n[1], side): T.add(b)
-                    elif g is not None and g[0] == 'DEV' and b in g[2]:
-                        T.add(b)
-            for a, w in surf:
-                other = w if a == z else a if w == z else None
-                if other is None: continue
-                cand = [b for b in R if any(self.inb(b[0]+dx, b[1]+dy) and
-                        (self.G[b[1]+dy][b[0]+dx] == ('Z', other) or
-                         (self.G[b[1]+dy][b[0]+dx] == 'LOCK' and other in self.lock_side_zones(b[0]+dx, b[1]+dy, (-dx, -dy))))
-                        for dx, dy in D4)]
-                if cand and not (set(cand) & T): T.add(rng.choice(cand))
-            nw = sum(1 for _, (ws, bid, zz) in self.warp_units.items() if zz == z) + \
-                 sum(1 for i, zz in getattr(self, 'warp_spot_zone', {}).items() if zz == z)
-            if not T:
-                # nothing fixed in this zone (every doorway moves: Tin Tower's stairs): start from a
-                # corner block; the pockets below spread the movable warps and items out from it
-                if held[z] + nw < 2: continue
-                corner = max(R, key=lambda b: (abs(2 * b[0] - self.Wb) + abs(2 * b[1] - self.Hb), rng.random()))
-                T.add(corner); self.pockets.add(corner)
-            def nbrs(b, C):
-                for dx, dy in D4:
-                    n = (b[0] + dx, b[1] + dy)
-                    if n in C: yield n
-                for p in ext.get(b, ()): yield p
-            def full_adj(C):
-                adj = {b: list(nbrs(b, C)) for b in C}
-                for b in C:
-                    for p in ext.get(b, ()): adj.setdefault(p, []).append(b)
-                return adj
-            def strong(C):
-                """is everything left (blocks + lock pieces they open onto) one strong component?"""
-                adj = full_adj(C)
-                for p, qs in plink.items():
-                    if p in adj: adj[p] = adj[p] + [q for q in qs if q in adj]
-                nodes = set(adj)
-                return len(self._scc(nodes, adj)) <= 1
-            def dist_from(src, adj):
-                dd = {src: 0}; q = deque([src])
-                while q:
-                    u = q.popleft()
-                    for v in adj[u]:
-                        if v not in dd: dd[v] = dd[u] + 1; q.append(v)
-                return dd
-            # pockets: far-away blocks for the things that stand in this zone
-            C = set(R)
-            adj = full_adj(C)
-            for _ in range(min(held[z] + nw, 6)):
-                dmin = {}
-                for t in T:
-                    for b, k in dist_from(t, adj).items():
-                        if b in C and k < dmin.get(b, 1 << 30): dmin[b] = k
-                far = [b for b in C if b not in T and dmin.get(b, 0) >= 2]
-                if not far: break
-                top = max(dmin[b] for b in far)
-                p = rng.choice([b for b in far if dmin[b] >= top - 1])
-                T.add(p); self.pockets.add(p)
-            Tl = list(T); rng.shuffle(Tl)
-            def score(adj):
-                tot = 0
-                for i in range(len(Tl) - 1):
-                    dd = dist_from(Tl[i], adj)
-                    if Tl[i + 1] not in dd: return None
-                    tot += dd[Tl[i + 1]]
-                return tot
-            def articulation(adj):
-                """non-cut vertices among region blocks (Tarjan, iterative)."""
-                disc, low, cut, t = {}, {}, set(), [0]
-                for root in adj:
-                    if root in disc: continue
-                    disc[root] = low[root] = t[0]; t[0] += 1
-                    st = [(root, None, iter(adj[root]))]; kids = 0
-                    while st:
-                        u, par, it = st[-1]
-                        v = next(it, None)
-                        if v is None:
-                            st.pop()
-                            if st:
-                                p = st[-1][0]
-                                low[p] = min(low[p], low[u])
-                                if st[-1][1] is not None and low[u] >= disc[p]: cut.add(p)
-                            continue
-                        if v == par: continue
-                        if v in disc: low[u] = min(low[u], disc[v])
-                        else:
-                            disc[v] = low[v] = t[0]; t[0] += 1
-                            if u == root: kids += 1
-                            st.append((v, u, iter(adj[v])))
-                    if kids > 1: cut.add(root)
-                return cut
-            removed = []
-            npair = len(Tl) - 1
-            # integer graph built once: region blocks + lock pieces; removed blocks are marked dead
-            nodes = sorted(C) + sorted({p for b in C for p in ext.get(b, ())})
-            ix = {v: k for k, v in enumerate(nodes)}
-            N = len(nodes)
-            alive = [True] * N
-            nb = [[] for _ in range(N)]
+            self._thin_zone(z, rng, samples, surf, held)
+
+    def _thin_zone(self, z, rng, samples, surf, held):
+        """corridors() for land zone z."""
+        mm = self.mm
+        if self.kind[z] != 'land': return
+        R = {b for b in self.region[z] if self.G[b[1]][b[0]] == ('Z', z)}
+        if len(R) < 3: return
+        if len(self.components(z)) != 1: return
+        piece, plink = self._lock_pieces(z)
+        ext, T = self._terminals(z, R, piece, rng, surf)
+        nw = sum(1 for _, (ws, bid, zz) in self.warp_units.items() if zz == z) + \
+             sum(1 for i, zz in getattr(self, 'warp_spot_zone', {}).items() if zz == z)
+        if not T:
+            # nothing fixed in this zone (every doorway moves: Tin Tower's stairs): start from a
+            # corner block; the pockets below spread the movable warps and items out from it
+            if held[z] + nw < 2: return
+            corner = max(R, key=lambda b: (abs(2 * b[0] - self.Wb) + abs(2 * b[1] - self.Hb), rng.random()))
+            T.add(corner); self.pockets.add(corner)
+        def nbrs(b, C):
+            for dx, dy in D4:
+                n = (b[0] + dx, b[1] + dy)
+                if n in C: yield n
+            for p in ext.get(b, ()): yield p
+        def full_adj(C):
+            adj = {b: list(nbrs(b, C)) for b in C}
             for b in C:
-                k = ix[b]
-                for dx, dy in D4:
-                    n = (b[0] + dx, b[1] + dy)
-                    if n in ix: nb[k].append(ix[n])
-                for p in ext.get(b, ()): nb[k].append(ix[p]); nb[ix[p]].append(k)
-            Ti = [ix[t] for t in Tl]
-            Tset = {ix[t] for t in T}
-            def bfs(src, skip=-1, dst=-1):
-                dist = [-1] * N; dist[src] = 0; q = deque([src])
-                while q:
-                    u = q.popleft()
-                    if u == dst: break
-                    du = dist[u] + 1
-                    for v in nb[u]:
-                        if dist[v] < 0 and alive[v] and v != skip: dist[v] = du; q.append(v)
-                return dist
-            def cut_vertices():
-                """articulation points of the alive graph (Tarjan, iterative)."""
-                disc = [-1] * N; low = [0] * N; cut = set(); t = 0
-                for root in range(N):
-                    if not alive[root] or disc[root] >= 0: continue
-                    disc[root] = low[root] = t; t += 1
-                    st = [(root, -1, iter(nb[root]))]; kids = 0
-                    while st:
-                        u, par, it = st[-1]
-                        v = next(it, None)
-                        if v is None:
-                            st.pop()
-                            if st:
-                                pu = st[-1][0]
-                                if low[u] < low[pu]: low[pu] = low[u]
-                                if st[-1][1] != -1 and low[u] >= disc[pu]: cut.add(pu)
-                            continue
-                        if v == par or not alive[v]: continue
-                        if disc[v] >= 0:
-                            if disc[v] < low[u]: low[u] = disc[v]
-                        else:
-                            disc[v] = low[v] = t; t += 1
-                            if u == root: kids += 1
-                            st.append((v, u, iter(nb[v])))
-                    if kids > 1: cut.add(root)
-                return cut
-            # per pair of consecutive terminals: current walk length and the blocks on a shortest
-            # walk. Removing a block off every shortest walk changes nothing, so only the pairs a
-            # candidate lies on are recomputed (and only those after a removal).
-            Lp, onp = [None] * npair, [set() for _ in range(npair)]
-            nblocks = len(C)
-            def refresh(i):
-                da = bfs(Ti[i]); db = bfs(Ti[i + 1])
-                L = da[Ti[i + 1]]
-                if L < 0: Lp[i] = None; onp[i] = set(); return
-                Lp[i] = L
-                onp[i] = {k for k in range(nblocks) if alive[k] and da[k] >= 0 and db[k] >= 0 and da[k] + db[k] == L}
-            directed = bool(plink)
-            dirty = set(range(npair))
-            while True:
-                cut = cut_vertices()
-                cand = [k for k in range(nblocks) if alive[k] and k not in Tset and k not in cut]
-                if not cand: break
-                for i in dirty: refresh(i)
-                dirty = set()
-                hot = [k for k in cand if any(k in o for o in onp)]
-                if hot:
-                    rng.shuffle(hot)
-                    best, bs = None, -1.0
-                    for k in hot[:samples]:
-                        sc, ok = 0, True
-                        for i in range(npair):
-                            if Lp[i] is None: continue
-                            if k in onp[i]:
-                                L = bfs(Ti[i], skip=k, dst=Ti[i + 1])[Ti[i + 1]]
-                                if L < 0: ok = False; break
-                                sc += L
-                            else: sc += Lp[i]
-                        if not ok: continue
-                        sc += rng.random()
-                        if sc > bs: best, bs = k, sc
-                    if best is None: best = rng.choice(cand)
-                else:
-                    best = rng.choice(cand)     # distances unchanged: just prune
-                b = nodes[best]
-                alive[best] = False; C.discard(b)
-                if directed and not strong(C):
-                    alive[best] = True; C.add(b); Tset.add(best); T.add(b); continue   # needed for a way back
-                removed.append(b)
-                dirty = {i for i in range(npair) if best in onp[i]}
-            for b in removed:
-                self.G[b[1]][b[0]] = None
-            self.region[z] = [b for b in self.region[z] if b in C]
-            if len(self.components(z)) != 1:
-                # the lock-piece shortcut was too optimistic for this zone: undo
-                for b in removed: self.G[b[1]][b[0]] = ('Z', z)
-                self.region[z] = list(R)
-                self.pockets -= R
+                for p in ext.get(b, ()): adj.setdefault(p, []).append(b)
+            return adj
+        def strong(C):
+            """is everything left (blocks + lock pieces they open onto) one strong component?"""
+            adj = full_adj(C)
+            for p, qs in plink.items():
+                if p in adj: adj[p] = adj[p] + [q for q in qs if q in adj]
+            nodes = set(adj)
+            return len(self._scc(nodes, adj)) <= 1
+        def dist_from(src, adj):
+            dd = {src: 0}; q = deque([src])
+            while q:
+                u = q.popleft()
+                for v in adj[u]:
+                    if v not in dd: dd[v] = dd[u] + 1; q.append(v)
+            return dd
+        # pockets: far-away blocks for the things that stand in this zone
+        C = set(R)
+        adj = full_adj(C)
+        for _ in range(min(held[z] + nw, 6)):
+            dmin = {}
+            for t in T:
+                for b, k in dist_from(t, adj).items():
+                    if b in C and k < dmin.get(b, 1 << 30): dmin[b] = k
+            far = [b for b in C if b not in T and dmin.get(b, 0) >= 2]
+            if not far: break
+            top = max(dmin[b] for b in far)
+            p = rng.choice([b for b in far if dmin[b] >= top - 1])
+            T.add(p); self.pockets.add(p)
+        Tl = list(T); rng.shuffle(Tl)
+        removed = []
+        npair = len(Tl) - 1
+        # integer graph built once: region blocks + lock pieces; removed blocks are marked dead
+        nodes = sorted(C) + sorted({p for b in C for p in ext.get(b, ())})
+        ix = {v: k for k, v in enumerate(nodes)}
+        N = len(nodes)
+        alive = [True] * N
+        nb = [[] for _ in range(N)]
+        for b in C:
+            k = ix[b]
+            for dx, dy in D4:
+                n = (b[0] + dx, b[1] + dy)
+                if n in ix: nb[k].append(ix[n])
+            for p in ext.get(b, ()): nb[k].append(ix[p]); nb[ix[p]].append(k)
+        Ti = [ix[t] for t in Tl]
+        Tset = {ix[t] for t in T}
+        def bfs(src, skip=-1, dst=-1):
+            dist = [-1] * N; dist[src] = 0; q = deque([src])
+            while q:
+                u = q.popleft()
+                if u == dst: break
+                du = dist[u] + 1
+                for v in nb[u]:
+                    if dist[v] < 0 and alive[v] and v != skip: dist[v] = du; q.append(v)
+            return dist
+        # per pair of consecutive terminals: current walk length and the blocks on a shortest
+        # walk. Removing a block off every shortest walk changes nothing, so only the pairs a
+        # candidate lies on are recomputed (and only those after a removal).
+        Lp, onp = [None] * npair, [set() for _ in range(npair)]
+        nblocks = len(C)
+        def refresh(i):
+            da = bfs(Ti[i]); db = bfs(Ti[i + 1])
+            L = da[Ti[i + 1]]
+            if L < 0: Lp[i] = None; onp[i] = set(); return
+            Lp[i] = L
+            onp[i] = {k for k in range(nblocks) if alive[k] and da[k] >= 0 and db[k] >= 0 and da[k] + db[k] == L}
+        directed = bool(plink)
+        dirty = set(range(npair))
+        while True:
+            cut = _cut_vertices(nb, alive)
+            cand = [k for k in range(nblocks) if alive[k] and k not in Tset and k not in cut]
+            if not cand: break
+            for i in dirty: refresh(i)
+            dirty = set()
+            hot = [k for k in cand if any(k in o for o in onp)]
+            if hot:
+                rng.shuffle(hot)
+                best, bs = None, -1.0
+                for k in hot[:samples]:
+                    sc, ok = 0, True
+                    for i in range(npair):
+                        if Lp[i] is None: continue
+                        if k in onp[i]:
+                            L = bfs(Ti[i], skip=k, dst=Ti[i + 1])[Ti[i + 1]]
+                            if L < 0: ok = False; break
+                            sc += L
+                        else: sc += Lp[i]
+                    if not ok: continue
+                    sc += rng.random()
+                    if sc > bs: best, bs = k, sc
+                if best is None: best = rng.choice(cand)
+            else:
+                best = rng.choice(cand)     # distances unchanged: just prune
+            b = nodes[best]
+            alive[best] = False; C.discard(b)
+            if directed and not strong(C):
+                alive[best] = True; C.add(b); Tset.add(best); T.add(b); continue   # needed for a way back
+            removed.append(b)
+            dirty = {i for i in range(npair) if best in onp[i]}
+        for b in removed:
+            self.G[b[1]][b[0]] = None
+        self.region[z] = [b for b in self.region[z] if b in C]
+        if len(self.components(z)) != 1:
+            # the lock-piece shortcut was too optimistic for this zone: undo
+            for b in removed: self.G[b[1]][b[0]] = ('Z', z)
+            self.region[z] = list(R)
+            self.pockets -= R
+
+    def _lock_pieces(self, z):
+        """the pieces of zone z inside locked blocks: strongly connected under vanilla moves there
+        (ledges are one way). Returns ({cell: piece}, {piece: pieces it leads to one way})."""
+        mm, W = self.mm, self.mm.w
+        def blk(c): return ((c % W) // 2, (c // W) // 2)
+        lc = {c for c in self.zg.zones[z] if blk(c) in self.lock}
+        ladj = {c: [d for d, r in self.cell_edges.get(c, ()) if d in lc] for c in lc}
+        piece = {}
+        for i, comp in enumerate(self._scc(lc, ladj)):
+            for c in comp: piece[c] = ('P', i)
+        plink = defaultdict(set)
+        for c in lc:
+            for d in ladj[c]:
+                if piece[c] != piece[d]: plink[piece[c]].add(piece[d])
+        return piece, plink
+
+    def _terminals(self, z, R, piece, rng, surf):
+        """the blocks of zone z (region R) that corridors must keep: doorways into locked blocks,
+        gate devices and one shore per Surf pair. Returns ({block: lock pieces it opens onto},
+        terminals)."""
+        mm = self.mm
+        ext = defaultdict(set)     # region block -> lock-piece nodes it opens onto
+        T = set()
+        for b in R:
+            for dx, dy in D4:
+                n = (b[0] + dx, b[1] + dy)
+                if not self.inb(*n): continue
+                g = self.G[n[1]][n[0]]
+                if g == 'LOCK':
+                    side = (-dx, -dy)
+                    for q in range(4):
+                        qx, qy = q & 1, q >> 1
+                        if (side[0] == 1 and qx == 1) or (side[0] == -1 and qx == 0) or \
+                           (side[1] == 1 and qy == 1) or (side[1] == -1 and qy == 0):
+                            c = mm.idx(n[0] * 2 + qx, n[1] * 2 + qy)
+                            if c in piece: ext[b].add(piece[c]); T.add(b)
+                    if z in self.lock_side_zones(n[0], n[1], side): T.add(b)
+                elif g is not None and g[0] == 'DEV' and b in g[2]:
+                    T.add(b)
+        for a, w in surf:
+            other = w if a == z else a if w == z else None
+            if other is None: continue
+            cand = [b for b in R if any(self.inb(b[0]+dx, b[1]+dy) and
+                    (self.G[b[1]+dy][b[0]+dx] == ('Z', other) or
+                     (self.G[b[1]+dy][b[0]+dx] == 'LOCK' and other in self.lock_side_zones(b[0]+dx, b[1]+dy, (-dx, -dy))))
+                    for dx, dy in D4)]
+            if cand and not (set(cand) & T): T.add(rng.choice(cand))
+        return ext, T
+
 
     def touches(self, a, b):
         """do placed zones a and b touch: a block of one beside a block of the other (through a doorway

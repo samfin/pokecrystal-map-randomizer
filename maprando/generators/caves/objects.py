@@ -4,6 +4,64 @@ from maprando.generators.caves.common import D4, GenError, NookError
 from maprando.model.movement import ROCK_SMASH, classify
 
 
+def _person(o):
+    """someone who stands in the way: not an item ball, boulder or rock."""
+    return o.obj_type != 'OBJECTTYPE_ITEMBALL' and 'BOULDER' not in o.sprite and 'ROCK' not in o.sprite
+
+
+def _pieces(cells):
+    """the number of 4-connected pieces of a set of cells."""
+    k, seen = 0, set()
+    for c0 in cells:
+        if c0 in seen: continue
+        k += 1; st = [c0]; seen.add(c0)
+        while st:
+            i, j = st.pop()
+            for dx, dy in D4:
+                n = (i+dx, j+dy)
+                if n in cells and n not in seen: seen.add(n); st.append(n)
+    return k
+
+
+class _Spots:
+    """The plan's tiles while objects are placed: what is taken (used), who stands in the way
+    (blocked) and which terrain the object being placed stands on."""
+    def __init__(self, gen, used, keep_clear):
+        self.P, self.Zc, self.fixed = gen.P, gen.Zc, gen.fixed
+        self.W, self.H = len(self.P[0]), len(self.P)
+        self.used, self.keep_clear = used, keep_clear
+        self.blocked = set()
+        self.terrain = '.'
+        self._base = {}
+
+    def floor(self, x, y):
+        """a free tile of the current terrain."""
+        return (0 <= x < self.W and 0 <= y < self.H and self.P[y][x] == self.terrain
+                and (x, y) not in self.used and (x, y) not in self.keep_clear)
+
+    def interior(self, x, y, z):
+        """can someone stand still on (x, y)? Blocking it must not split zone z any further (a zone
+        may already be in pieces joined by ledges or locked moves) nor touch fixed contact cells."""
+        if (x, y) in self.fixed: return False
+        key = (z, len(self.blocked))
+        if key not in self._base:
+            cells = {(i, j) for j in range(self.H) for i in range(self.W)
+                     if self.Zc[j][i] == z and self.P[j][i] != '#' and (i, j) not in self.blocked}
+            self._base[key] = (cells, _pieces(cells))
+        cells, base = self._base[key]
+        if (x, y) not in cells or len(cells) < 2: return False
+        return _pieces(cells - {(x, y)}) <= base
+
+    def touch(self, x, y):
+        """the zones of (x, y) and its open neighbours."""
+        zs = set()
+        for dx, dy in [(0, 0)] + D4:
+            if 0 <= x+dx < self.W and 0 <= y+dy < self.H and self.Zc[y+dy][x+dx] is not None \
+                    and self.P[y+dy][x+dx] != '#':
+                zs.add(self.Zc[y+dy][x+dx])
+        return zs
+
+
 class ObjectMixin:
     """People, item balls, rocks, boulders and hidden items placed on the plan."""
     def place_objects(self, rng):
@@ -11,62 +69,17 @@ class ObjectMixin:
         zone it belongs to (gate objects in their gates). Raises GenError if something does
         not fit."""
         m2 = copy.deepcopy(self.m)
-        P, Zc = self.P, self.Zc
-        W, H = len(P[0]), len(P)
-        mm = self.mm
+        locked_cells = {(x, y) for (bx, by) in self.lock for x in (bx*2, bx*2+1) for y in (by*2, by*2+1)}
         used = set(c for c, _ in self.gate_cells)
-        blocked = set()
-        terrain = '.'
-        locked_all = {(x, y) for (bx, by) in self.lock for x in (bx*2, bx*2+1) for y in (by*2, by*2+1)}
-        keep_clear = set(locked_all) | self.boulder_clear
+        keep_clear = set(locked_cells) | self.boulder_clear
         for w in m2.warps:
             if w.index in self.warp_place: w.x, w.y = self.warp_place[w.index]
-        # arrival spots on plain floor (landing from a hole above): somewhere far along their zone
-        pk = getattr(self, 'pockets', set())
-        for w in m2.warps:
-            z = self.warp_spot_zone.get(w.index) if self.warp_spots else None
-            if z is None or not any(v.index == w.index for v in self.warp_spots): continue
-            cs = [(x, y) for y in range(H) for x in range(W) if P[y][x] == '.' and Zc[y][x] == z
-                  and (x, y) not in locked_all and (x, y) not in used]
-            inpk = [c for c in cs if (c[0] // 2, c[1] // 2) in pk]
-            if not cs: continue          # nowhere else to go: it stays where it is
-            w.x, w.y = rng.choice(sorted(inpk or cs)); used.add((w.x, w.y))
+        self._place_arrivals(m2, rng, used, locked_cells)
         for w in m2.warps:
             for dx in (-1, 0, 1):
                 for dy in (-1, 0, 1): keep_clear.add((w.x + dx, w.y + dy))
         self.keep_clear = keep_clear
-        def floor(x, y): return (0 <= x < W and 0 <= y < H and P[y][x] == terrain and (x, y) not in used
-                                 and (x, y) not in keep_clear)
-        def pieces(cells):
-            k, seen = 0, set()
-            for c0 in cells:
-                if c0 in seen: continue
-                k += 1; st = [c0]; seen.add(c0)
-                while st:
-                    i, j = st.pop()
-                    for dx, dy in D4:
-                        n = (i+dx, j+dy)
-                        if n in cells and n not in seen: seen.add(n); st.append(n)
-            return k
-        base_cache = {}
-        def interior(x, y, z):
-            # blocking (x,y) must not split zone z any further (a zone may already be in pieces
-            # joined by ledges or locked moves) and must not touch fixed contact cells
-            if (x, y) in self.fixed: return False
-            key = (z, len(blocked))
-            if key not in base_cache:
-                cells = {(i, j) for j in range(H) for i in range(W)
-                         if Zc[j][i] == z and P[j][i] != '#' and (i, j) not in blocked}
-                base_cache[key] = (cells, pieces(cells))
-            cells, base = base_cache[key]
-            if (x, y) not in cells or len(cells) < 2: return False
-            return pieces(cells - {(x, y)}) <= base
-        def touch(x, y):
-            zs = set()
-            for dx, dy in [(0, 0)] + D4:
-                if 0 <= x+dx < W and 0 <= y+dy < H and Zc[y+dy][x+dx] is not None and P[y+dy][x+dx] != '#':
-                    zs.add(Zc[y+dy][x+dx])
-            return zs
+        sp = _Spots(self, used, keep_clear)
         gate_objs = {id(o) for _, o in self.gate_cells if o is not None}
         self.pocket_used = set()
         missing_touch = [o for o in self.touch_objs.values() if id(o) not in gate_objs
@@ -76,27 +89,50 @@ class ObjectMixin:
             if o is None: continue
             mo = m2.bg_events[o.index] if hasattr(o, 'kind') else m2.objects[o.index]
             mo.x, mo.y = cx, cy
-        locked_cells = {(x, y) for (bx, by) in self.lock for x in (bx*2, bx*2+1) for y in (by*2, by*2+1)}
-        def person(o):
-            return o.obj_type != 'OBJECTTYPE_ITEMBALL' and 'BOULDER' not in o.sprite and 'ROCK' not in o.sprite
         # everyone who stands somewhere already counts as in the way: people kept at their vanilla
         # spot and people standing in gate gaps
         for o in self.m.objects:
-            if person(o) and (o.x, o.y) in locked_cells: blocked.add((o.x, o.y))
+            if _person(o) and (o.x, o.y) in locked_cells: sp.blocked.add((o.x, o.y))
         for (cx, cy), o in self.gate_cells:
-            if o is not None and not hasattr(o, 'kind') and person(o): blocked.add((cx, cy))
+            if o is not None and not hasattr(o, 'kind') and _person(o): sp.blocked.add((cx, cy))
+        self._place_people(m2, rng, sp, locked_cells, gate_objs)
+        sp.terrain = '.'
+        self._place_bg_events(m2, rng, sp, locked_cells, gate_objs)
+        self.m2 = m2
+        self.fill_stray_nooks(m2, locked_cells)
+
+    def _place_arrivals(self, m2, rng, used, locked_all):
+        """arrival spots on plain floor (landing from a hole above): somewhere far along their zone."""
+        P, Zc = self.P, self.Zc
+        W, H = len(P[0]), len(P)
+        pk = getattr(self, 'pockets', set())
+        for w in m2.warps:
+            z = self.warp_spot_zone.get(w.index) if self.warp_spots else None
+            if z is None or not any(v.index == w.index for v in self.warp_spots): continue
+            cs = [(x, y) for y in range(H) for x in range(W) if P[y][x] == '.' and Zc[y][x] == z
+                  and (x, y) not in locked_all and (x, y) not in used]
+            inpk = [c for c in cs if (c[0] // 2, c[1] // 2) in pk]
+            if not cs: continue          # nowhere else to go: it stays where it is
+            w.x, w.y = rng.choice(sorted(inpk or cs)); used.add((w.x, w.y))
+
+    def _place_people(self, m2, rng, sp, locked_cells, gate_objs):
+        """people, item balls, rocks and boulders: each at a spot reached from the same zones as in
+        vanilla (trainers where they trap nobody, item balls in the pockets made for them)."""
+        P, Zc = self.P, self.Zc
+        W, H = len(P[0]), len(P)
+        mm, used, blocked, keep_clear = self.mm, sp.used, sp.blocked, sp.keep_clear
         for o in self.m.objects:
             if id(o) in gate_objs: continue
             mo = m2.objects[o.index]
             if (o.x, o.y) in locked_cells: used.add((o.x, o.y)); continue
             aid = f'obj:{o.const or o.index}'
             S = self.anchor_zones.get(aid)
-            terrain = '~' if classify(mm, mm.coll[mm.idx(o.x, o.y)]) in ('water', 'forced') else '.'
+            sp.terrain = '~' if classify(mm, mm.coll[mm.idx(o.x, o.y)]) in ('water', 'forced') else '.'
             is_wall = mm.objects.get(mm.idx(o.x, o.y), ('',))[0] in ('wall', 'bits')
             # a walking NPC is passable in the model, but it can be boxed in (a wall on one side, a
             # trainer on the other) and then never moves: place it only where standing still cuts
             # nothing, and count it as in the way for everyone placed after it
-            walker = not is_wall and person(o)
+            walker = not is_wall and _person(o)
             if not S:
                 # unreachable in vanilla: park it in solid wall with no open cell beside it
                 def buried(x, y):
@@ -108,21 +144,21 @@ class ObjectMixin:
                 cands, lazy = [], []
                 for y in range(H):
                     for x in range(W):
-                        if not floor(x, y): continue
+                        if not sp.floor(x, y): continue
                         if is_wall:
                             if len(S) == 1:
                                 if Zc[y][x] not in S: continue
                                 lazy.append((x, y)); continue
-                            elif touch(x, y) != S: continue
+                            elif sp.touch(x, y) != S: continue
                         else:
-                            if touch(x, y) != S and not (len(S) == 1 and Zc[y][x] in S): continue
-                            if walker and (Zc[y][x] is None or not interior(x, y, Zc[y][x])): continue
+                            if sp.touch(x, y) != S and not (len(S) == 1 and Zc[y][x] in S): continue
+                            if walker and (Zc[y][x] is None or not sp.interior(x, y, Zc[y][x])): continue
                         cands.append((x, y))
                 if lazy:
                     # the connectivity test is the slow part: test random cells until enough pass
                     rng.shuffle(lazy); zz = next(iter(S))
                     for c in lazy:
-                        if interior(c[0], c[1], zz):
+                        if sp.interior(c[0], c[1], zz):
                             cands.append(c)
                             if len(cands) >= 25: break
             if not cands and is_wall and S and classify(mm, mm.coll[mm.idx(o.x, o.y)]) is None:
@@ -151,7 +187,12 @@ class ObjectMixin:
                     x, y = rng.choice(cands)
             mo.x, mo.y = x, y; used.add((x, y))
             if is_wall or walker: blocked.add((x, y))
-        terrain = '.'
+
+    def _place_bg_events(self, m2, rng, sp, locked_cells, gate_objs):
+        """signs and hidden items: hidden items at the tip of a one-tile dead end where possible."""
+        P, Zc = self.P, self.Zc
+        W, H = len(P[0]), len(P)
+        used, keep_clear = sp.used, sp.keep_clear
         for b in self.m.bg_events:
             mb = m2.bg_events[b.index]
             if id(b) in gate_objs: continue
@@ -195,9 +236,9 @@ class ObjectMixin:
                     def opens(x, y): return sum(1 for dx, dy in D4 if 0 <= x+dx < W and 0 <= y+dy < H
                                                 and P[y+dy][x+dx] not in ('#', 'V', 'H'))
                     tips = [(x, y) for y in range(H) for x in range(W)
-                            if (x // 2, y // 2) in pk and floor(x, y) and Zc[y][x] == z]
+                            if (x // 2, y // 2) in pk and sp.floor(x, y) and Zc[y][x] == z]
                     if not tips:   # no branch made for it: the most enclosed floor tile of its zone
-                        tips = [(x, y) for y in range(H) for x in range(W) if floor(x, y) and Zc[y][x] == z]
+                        tips = [(x, y) for y in range(H) for x in range(W) if sp.floor(x, y) and Zc[y][x] == z]
                     if tips:
                         least = min(opens(*c) for c in tips)
                         spot = rng.choice(sorted(c for c in tips if opens(*c) == least))
@@ -217,11 +258,9 @@ class ObjectMixin:
                          if P[y][x] == '#' and (x, y) not in used and (x, y) not in locked_cells
                          and (x, y) not in keep_clear and wet(x, y) == S]
             else:
-                cands = [(x, y) for y in range(H) for x in range(W) if floor(x, y) and touch(x, y) >= S and Zc[y][x] in S]
+                cands = [(x, y) for y in range(H) for x in range(W) if sp.floor(x, y) and sp.touch(x, y) >= S and Zc[y][x] in S]
             if not cands: raise GenError('no spot for bg event')
             x, y = rng.choice(cands); mb.x, mb.y = x, y; used.add((x, y))
-        self.m2 = m2
-        self.fill_stray_nooks(m2, locked_cells)
 
     def trainer_safe(self, origin, o, blocked):
         """grid version of trainers.unsafe_trainers for one candidate spot: walking up to the
