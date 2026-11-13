@@ -10,7 +10,7 @@
    requirement matrix equals vanilla. Any failure raises GenError and the caller retries."""
 import copy, random
 from collections import defaultdict, deque
-from .model import build_model, SURF, WATERFALL, CUT, WHIRLPOOL, ROCK_SMASH, classify, side_walls, LEDGE_DIRS, DIRS, open_tile
+from .model import build_model, SURF, WATERFALL, CUT, WHIRLPOOL, ROCK_SMASH, classify, LEDGE_DIRS, DIRS, open_tile
 
 NORM = {',': '.', 'H': '#', 'T': '#'}   # plan view of grass / headbutt / cut-tree cells
 from .zones import ZoneGraph, medium

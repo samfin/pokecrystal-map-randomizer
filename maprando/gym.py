@@ -613,7 +613,7 @@ class GymGenerator:
         always reachable again) and people stand outside / inside the gate as in vanilla (any other
         area behind boulders is extra, like a ledge's). Returns (moves, grid, {object index: cell})
         or None."""
-        from .pushes import min_moves, K
+        from .pushes import min_moves
         from .boulderroom import player_traps
         W2, H2 = self.W2, self.H2
         block = {(o.x, o.y) for o in self.kept}

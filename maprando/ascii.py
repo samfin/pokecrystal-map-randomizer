@@ -1,4 +1,4 @@
-from .model import classify, COLL_WATERFALL, FORCED
+from .model import classify
 
 def render(mm, rows=None, marks=None):
     marks = marks or {}

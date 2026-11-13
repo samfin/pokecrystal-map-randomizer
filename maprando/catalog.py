@@ -1,6 +1,6 @@
 """Block catalogue per tileset: collision pattern of every block, which blocks vanilla maps
 actually use, and how often blocks sit next to each other (for visual coherence)."""
-import math, random
+import math
 from collections import Counter, defaultdict
 from .model import classify, side_walls, FORCED, COLL_PIT
 

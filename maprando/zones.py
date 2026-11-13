@@ -6,7 +6,7 @@ Edges between zones carry the requirement of the step (ledge jumps are one-way, 
 land->water, Waterfall climbs, object bits for rocks/boulders/NPC blockers)."""
 from collections import defaultdict
 from .reach import Searcher
-from .model import SURF, classify, ABILITY_NAMES
+from .model import SURF, classify
 
 ALL = (1 << 62) - 1
 

@@ -10,12 +10,11 @@ it may have changed from the source tree, so later runs only rebuild what change
 import argparse, json, os, shutil, subprocess, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from generate import CAVES, ROUTES, ICE, GYMS, ALL_MAPS, KNOWN_UNSUPPORTED
+from generate import ROUTES, ICE, GYMS, ALL_MAPS, KNOWN_UNSUPPORTED
 
 MARK = '.maprando-source'
 # Blackthorn 2F from chambers (maprando/chambers.py): off - its puzzles came out dull; the
 # from-scratch builder (maprando/gymboulders.py, classic scoring) is used
-CHAMBERS_BLACKTHORN = True
 CHAMBER_TRIES = 4       # chamber rooms built for Blackthorn 2F (each ~2 s)
 
 def prepare_work(src, work):
@@ -98,7 +97,7 @@ def _work(job):
 
 def _work1(job):
     from maprando.catalog import Catalog, catalog_for
-    from maprando.gen import CaveGenerator, GenError
+    from maprando.gen import GenError
     n, seed, tries = job
     d, perms, cats = _W['d'], _W['perms'], _W['cats']
     m = d.maps[n]
@@ -115,8 +114,7 @@ def _work1(job):
             except IceError as e: return n, None, f'vanilla ({e})'
             if n == 'IcePathB1F':
                 # the Strength-boulder room: new walls, boulder spots and holes (maprando/boulderroom.py)
-                from maprando.boulderroom import BoulderRoom, ScratchRoom, BoulderRoomError
-                cat = catalog_for(d, m, perms, cats)
+                from maprando.boulderroom import BoulderRoom, BoulderRoomError
                 # built from chambers: small pieces designed whole (walls, holes and boulders
                 # together) for the most boulder moves, joined by corridors (maprando/chambers.py)
                 import random as _r
@@ -133,13 +131,7 @@ def _work1(job):
                 except (GymBoulderError, BoulderRoomError): built = None
                 if built is not None:
                     return n, built[0], f'randomized (boulder room from chambers: {built[1][0]} boulder moves, {built[1][1]} submoves)'
-                try:
-                    m2 = ScratchRoom(d, m, perms, cat, base=m2).generate(seed)        # built from scratch
-                except BoulderRoomError:
-                    try:
-                        m2 = BoulderRoom(d, m, perms, cat, base=m2).generate(seed)    # vanilla room reshaped
-                    except BoulderRoomError as e:
-                        return n, m2, f'randomized (ice only; boulder room kept: {e})'
+                return n, m2, 'randomized (ice only; boulder room kept: no chamber room found)'
         elif n in GYMS:
             from maprando.gym import GymGenerator, PUZZLE_GYMS
             kind = PUZZLE_GYMS.get(n)
@@ -156,8 +148,6 @@ def _work1(job):
                 g = IceGymGenerator(d, m, perms); m2 = g.generate(seed)
                 return n, m2, 'randomized (ice: %(press)d presses to the leader)' % g.info
             if kind == 'boulders':
-                from maprando.boulderroom import BoulderRoom, ScratchRoom, BoulderRoomError
-                own = Catalog(d, m.tileset, perms, [m])
                 last = None
                 if n == 'BlackthornGym2F':
                     # built from chambers (library pieces with the boulders, gate boulders inside;
@@ -177,23 +167,16 @@ def _work1(job):
                             cands.append((room_submoves(d, m, m2, perms) or 0, 1, m2, 'from scratch'))
                             break
                         except GymBoulderError as e: last = e
-                    if CHAMBERS_BLACKTHORN:
-                        for k in range(CHAMBER_TRIES):
-                            try:
-                                built = build_room(BoulderGymScratch(d, m, perms), _r.Random(f'{seed}-{n}-chambers-{k}'), name=n)
-                            except GymBoulderError: built = None
-                            if built is not None:
-                                cands.append((room_submoves(d, m, built[0], perms) or 0, 0, built[0], 'from chambers'))
+                    for k in range(CHAMBER_TRIES):
+                        try:
+                            built = build_room(BoulderGymScratch(d, m, perms), _r.Random(f'{seed}-{n}-chambers-{k}'), name=n)
+                        except GymBoulderError: built = None
+                        if built is not None:
+                            cands.append((room_submoves(d, m, built[0], perms) or 0, 0, built[0], 'from chambers'))
                     if cands:
                         sub, _, m2, how = max(cands, key=lambda c: (c[0], c[1]))
                         return n, m2, f'randomized (boulder gym {how}: {sub} submoves; of {len(cands)} rooms)'
-                for k in range(8):
-                    try:
-                        # Blackthorn's room is small: a longer search moves its holes and boulders further
-                        m2 = BoulderRoom(d, m, perms, own).generate(f'{seed}-{k}', iters=900 if n == 'BlackthornGym2F' else 300)
-                        return n, m2, 'randomized (boulder room reshaped)'
-                    except BoulderRoomError as e: last = e
-                return n, None, f'vanilla ({last})'
+                return n, None, f'vanilla ({last or "no boulder room found"})'
             # a few sub-seeds: a gym whose best designs all fail the checks tries again
             last = None
             for k in range(4):

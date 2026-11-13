@@ -1,21 +1,7 @@
 """Events whose bytes the Item Randomizer rewrites (from its label/address lists).
 Their coordinates may be overwritten after we run, so they must keep their vanilla spot."""
-import glob, json, os
-from .patch import load_sym, events_layout, WARP, COORD, BG, OBJ
-
-def ir_ranges(ir_root):
-    rs = []
-    files = [os.path.join(ir_root, 'crystal-speedchoice-label-details.json')]
-    files += glob.glob(os.path.join(ir_root, 'Config', '*details.json'))
-    files += glob.glob(os.path.join(ir_root, 'Warp Data', '*details.json'))
-    for f in files:
-        try: data = json.load(open(f))
-        except Exception: continue
-        if isinstance(data, dict): data = list(data.values())
-        for e in data:
-            try: rs.append((e['address_range']['begin'], e['address_range']['end']))
-            except (KeyError, TypeError): pass
-    return rs
+import json, os
+from .patch import events_layout, BG, OBJ
 
 
 def mode_patch_files(ir_root, mode_path):

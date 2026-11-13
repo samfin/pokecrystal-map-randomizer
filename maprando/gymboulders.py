@@ -21,7 +21,6 @@ from .model import build_model
 from .reach import requirement_matrix
 from .catalog import Catalog
 from .boulderroom import stonetable, BoulderRoom, bad_boulder_room
-from .blocking import people_cells
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 PLAIN_WALL = (0x07, 0x15, 0x14)

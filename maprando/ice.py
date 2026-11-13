@@ -13,7 +13,7 @@ its outline and the vanilla tiles around it, and only the rocks inside are redes
 Everything outside the rooms stays vanilla; the full requirement matrix is checked at the end."""
 import copy, math, random
 from collections import defaultdict, deque
-from .model import build_model, classify, side_walls, COLL_ICE, COLL_PIT, DIRS
+from .model import build_model, classify, COLL_ICE, COLL_PIT, DIRS
 from .reach import requirement_matrix
 from .jumps import bad_jumps
 

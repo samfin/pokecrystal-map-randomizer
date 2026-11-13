@@ -5,7 +5,6 @@ pushing A three times, then B twice, then C, then A again is 4 moves (AAABBCA); 
 between two pushes of the same boulder does not end a move. min_moves is the fewest moves after
 which the player can walk to a goal tile (0-1 search: another push of the boulder pushed last costs
 nothing, any other boulder costs 1)."""
-from collections import deque
 
 
 K = 10000          # cost = moves * K + submoves: fewest moves first, then fewest submoves
@@ -190,7 +189,7 @@ def drop_moves(W, floor, boulders, own, starts, boxonly=frozenset(), limit=30000
 def gym_puzzle(d, m2, perms):
     """the finished map's Strength puzzle (Cianwood Gym): (fewest boulder moves to the leader or
     None, positions explored, positions that shut the player in)."""
-    from .model import build_model, classify, STRENGTH
+    from .model import build_model, classify
     from .boulderroom import player_traps
     from .gym import GYM_LEADERS
     mm = build_model(d, m2, perms)
