@@ -1,3 +1,4 @@
+"""Text view of a map model: one character per cell (for debugging)."""
 from maprando.model.movement import classify
 
 def render(mm, rows=None, marks=None):

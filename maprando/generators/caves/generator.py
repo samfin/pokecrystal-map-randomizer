@@ -10,7 +10,8 @@
    requirement matrix equals vanilla. Any failure raises GenError and the caller retries."""
 from collections import defaultdict
 import copy, random
-from maprando.generators.caves.common import GenError, MergeError, NookError, PairError, PortConflict, SignError, SplitError, UnifyError, WarpRoomError
+from maprando.generators.caves.common import (GenError, MergeError, NookError, PairError, PortConflict, SignError,
+                                              SplitError, UnifyError, WarpRoomError)
 from maprando.model.movement import build_model
 from maprando.model.reach import requirement_matrix
 from maprando.model.zones import ZoneGraph
@@ -53,7 +54,10 @@ def generate_cave(d, m, perms, cat, seed, tries):
             else: g.allow_split = False
 
 
-class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, ObjectMixin, NookMixin, DrawingMixin, LedgeMixin, VerifyMixin):
+class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, ObjectMixin, NookMixin,
+                    DrawingMixin, LedgeMixin, VerifyMixin):
+    """Generates one cave or route layout; the steps live in the mixins (one module each) and
+    generate() below runs them in order."""
     best_of = 3
 
     far_links = True

@@ -8,17 +8,37 @@ ability requirements between every entry point and every check exactly as in van
     python3 analyze.py [--maps Route32 ...] [--show]   # requirement matrices -> out/analysis.json
     python3 crosscheck.py                              # compare with Item Randomizer Map Data -> out/crosscheck.json
 
-## Model (maprando/)
+## Code layout (maprando/)
 
-- `parse.py`  – reads map sizes, tilesets, collision, cut/whirlpool block swaps, .blk files and events.
-- `model.py`  – per-map cell grid (16x16 px cells, 2x2 per block) following the engine's rules:
-  collision permissions, side walls, ledges (jump from the ledge cell), waterfalls/currents,
-  cut/whirlpool block swaps, rocks (Rock Smash), boulders (Strength), conditionally present
-  NPCs (own requirement bit, e.g. Sudowoodo), item balls and fixed NPCs as walls.
-  Anchors: warps, coord events, bg events, objects, and each contiguous run of passable
-  cells on a connected map edge. Entries = warps + edge runs.
-- `reach.py`  – Pareto-minimal requirement search: for each entry, the minimal ability sets
-  needed to reach every anchor (directed: ledges and waterfalls are one-way).
+    from maprando.io.disasm import load_disasm
+    from maprando.randomizer import Randomizer
+
+    r = Randomizer(load_disasm('../pokecrystal-speedchoice2'))
+    maps, log = r.randomize_maps('my seed')       # {name: new MapInfo}, {name: report}
+
+- `randomizer.py` – `Randomizer`: picks the generator for each map and returns the new map and a
+  one-line report; a map whose generator fails stays vanilla. `maps.py` lists the maps by kind.
+- `io/` – the only part that touches files. `disasm.py` reads map sizes, tilesets, collision,
+  cut/whirlpool block swaps, .blk files, events and each map's script text up front; `rom.py`
+  writes maps into a built ROM; `item_rando.py` reads what the Item Randomizer mode changes;
+  `disasm_write.py`, `render.py` and `ascii.py` are for the source build and for looking at maps.
+- `model/` – `movement.py`: per-map cell grid (16x16 px cells, 2x2 per block) following the
+  engine's rules: collision permissions, side walls, ledges (jump from the ledge cell),
+  waterfalls/currents, cut/whirlpool block swaps, rocks (Rock Smash), boulders (Strength),
+  conditionally present NPCs (own requirement bit, e.g. Sudowoodo), item balls and fixed NPCs as
+  walls. Anchors: warps, coord events, bg events, objects, and each contiguous run of passable
+  cells on a connected map edge. Entries = warps + edge runs. `reach.py`: Pareto-minimal
+  requirement search: for each entry, the minimal ability sets needed to reach every anchor
+  (directed: ledges and waterfalls are one-way). `zones.py`, `catalog.py`, `metrics.py`.
+- `checks/` – rules a layout must keep, used by the generators and by readback.py (trainers,
+  people, cutscenes, ledge jumps, boulders, Strength puzzles, S.S. Aqua).
+- `generators/` – `caves/` (caves, routes and other areas; one module per step, put together in
+  `generator.py`), `ice.py`, `chambers.py` (boulder rooms from pieces) and `gyms/` (`standard.py`
+  for trainer gyms, one module per puzzle gym).
+
+Everything outside `io/` is plain Python with no file access, processes or subprocesses, so it
+can run in the browser (Pyodide). build.py spreads the maps over worker processes; a map comes
+out the same either way because each map has its own seed.
 
 The invariant for generated maps: identical requirement matrix to vanilla.
 
@@ -26,7 +46,7 @@ The invariant for generated maps: identical requirement matrix to vanilla.
 Flash (map-wide darkness), Squirtbottle/Pass/tickets (scripts; modelled as NPC blockers where
 the blocker is an object), badges.
 
-## Phase 1: cave generator (maprando/gen.py)
+## Phase 1: cave generator (maprando/generators/caves/)
 
     python3 build.py --seed N        # generate caves, build ROM -> ../output/crystal-maprando.gbc (+ .sym)
     python3 preview.py --seed N      # vanilla vs generated PNGs -> out/preview/
@@ -41,7 +61,7 @@ the tile itself does not count). Every accepted map must pass `verify()`:
   in vanilla still has reachable terrain; a map with no such table gets none outside vanilla-locked
   blocks; no unreachable water anywhere, or under an NPC (waterfall/current tiles are exempt).
 
-Layout style (maprando/gen.py `corridors`): land areas are grown to about three times their
+Layout style (maprando/generators/caves/ `corridors`): land areas are grown to about three times their
 vanilla size, then thinned block by block into one-block-wide winding corridors with walls
 between them. Kept: every doorway into a locked block, every gate device, one shore per Surf
 crossing, and a pocket (side branch) for each item or NPC; item balls go at the ends of those
@@ -51,14 +71,14 @@ chosen to lengthen the walk between those points. New areas attach far along the
 per map, the one with the longest walks is kept. Routes keep block-aligned corridors (no erosion),
 so walls are solid forest; headbutt trees go in half-block alcoves beside the path.
 
-Trainers (maprando/trainers.py): a trainer that spots you walks up and stays put. For every
+Trainers (maprando/checks/trainers.py): a trainer that spots you walks up and stays put. For every
 trainer, every facing it may have (own facing and the flipped one, since the Item Randomizer
 can invert facings; all four for spinners) and every cell it may stop on, the stop must not
 split a walkable area and leaving its own cell must not join two areas. Placement only picks
 safe spots, and `verify()` rejects any map with an unsafe trainer (vanilla's four existing cases
 are allowed at their vanilla spots).
 
-Ice (maprando/ice.py; Ice Path 1F, B1F, B2F Blackthorn side): a different generator from the
+Ice (maprando/generators/ice.py; Ice Path 1F, B1F, B2F Blackthorn side): a different generator from the
 corridor one. The requirement model now slides you on ice: stepping onto ice keeps you moving
 until the next tile blocks you (you stop on the ice) or you reach a tile that is not ice or a warp.
 Every ice room keeps its outline and the vanilla tiles around it; only the rocks are redesigned
@@ -83,7 +103,7 @@ floor; ledges split them), and no trap: every tile you can slide to can still re
 Typical result (slides / corners / dead ends): 1F 54/13/0 -> about 73/5-8/0, B1F 50/4/3 ->
 about 68/6-8/0, B2F Blackthorn side 12/2/3 -> about 16/3/1-2. Non-ice parts of these maps stay vanilla.
 
-Ice Path B1F's Strength-boulder room (maprando/boulderroom.py): each boulder falls only through
+Ice Path B1F's Strength-boulder room (maprando/checks/boulder_room.py): each boulder falls only through
 its own hole (the stonetable pairs hole warps with boulder objects); a boulder on another hole just
 sits there. Where a B1F hole is does not matter to B2F (the hole warps to a fixed B2F spot and the
 fallen boulder appears at a fixed B2F spot), so holes move too, each with its vanilla block. The
@@ -95,8 +115,9 @@ player walks round at each turn; the 'gate' boulder (reachable without Strength,
 part) starts in the sealed part's only doorway. Cheapest tunnels then join every piece to the ways
 in (and the ways in to each other) without joining the parts except through the doorway; patterns
 the tileset cannot draw (diagonal pairs) get one more floor tile. 6000 attempts, best score first.
-If none passes, the vanilla room is reshaped instead (`BoulderRoom`: simulated annealing over an
-abstract grid of floor/wall quarters, hole blocks and boulder spots). B1F's holes are one-way (you
+If none passes, the vanilla room was reshaped instead (`BoulderRoom`: simulated annealing over an
+abstract grid of floor/wall quarters, hole blocks and boulder spots). Both were later replaced by
+the chamber builder (below) and removed. B1F's holes are one-way (you
 cannot arrive through them: model.arrivable), so only the real entrances' requirements matter. A design
 is kept only if no boulder can ever be pushed onto another boulder's hole (checked over all plain
 floor with the other boulders removed, a safe over-estimate), every boulder can be pushed into its
@@ -106,7 +127,7 @@ in vanilla with and without Strength, and the drawn map has vanilla's requiremen
 prefers more pushes and changes of direction. A fixed number of iterations keeps a seed's room the
 same on every machine. readback.py re-checks the puzzle in the finished ROM.
 
-Warps move (maprando/gen.py `_movable_warps`, `place_warps`): self-contained warp blocks (ladders,
+Warps move (maprando/generators/caves/ `_movable_warps`, `place_warps`): self-contained warp blocks (ladders,
 stairs, holes, warp panels: one block holding only floor, wall and the warp tiles) are placed at the
 end of a branch of their zone, and arrival spots on plain floor (landing from a hole above) move to
 a far spot of their zone. Doors, cave mouths, map-edge exits and anything near a script, sign,
@@ -126,7 +147,7 @@ Scripted puzzles: an object a script moves between three or more spots (Ilex For
 keeps the vanilla layout over the whole area of those spots. Where two different gates separate the
 same two zones (Ilex Forest's apprentice and Kurt), every gate between them stays as in vanilla.
 
-People (maprando/blocking.py): walking NPCs count as passable in the requirement model, but one boxed
+People (maprando/checks/blocking.py): walking NPCs count as passable in the requirement model, but one boxed
 in by a wall and a trainer never moves. Placement treats everyone (walking NPCs, NPCs kept at their
 vanilla spot, NPCs in gate gaps) as standing in the way, walking NPCs only go where standing still
 cuts nothing, and `verify()` rejects layouts where everyone standing still, or a trainer that has
@@ -155,7 +176,7 @@ the wall between or at their vanilla spot), zones with no room at all (Tin Tower
 generated strip: after 15 failed tries the item keeps its vanilla spot instead of failing the map),
 and Ice Path's items inside rocks on the ice. readback.py lists every exception.
 
-Cutscenes (maprando/scenes.py): scripts are written for the vanilla map, and a scripted walk that
+Cutscenes (maprando/checks/scenes.py): scripts are written for the vanilla map, and a scripted walk that
 runs into a wall or an object never finishes, so the game hangs (Slowpoke Well B1F: Kurt walks to
 you after the last grunt). Every `applymovement` path keeps its vanilla blocks: an object's walk is
 replayed from its `moveobject` spot or its own position, the player's from the coord event or the
@@ -178,7 +199,7 @@ connect the same way as in vanilla. `verify()` also compares the requirement mat
 applied (one at a time, then all together), so the room behind Team Rocket Base B3F's password door
 or below Burned Tower's hole stays reachable as in vanilla; readback.py reports any difference.
 
-Ledge jumps (maprando/jumps.py): standing on a ledge tile and pressing its way when the step is
+Ledge jumps (maprando/checks/jumps.py): standing on a ledge tile and pressing its way when the step is
 blocked makes the player jump two tiles, and the game never checks where they land: into a wall, on
 water or onto a person, the player is stuck. The tiles in front of and beyond every ledge keep their
 vanilla blocks (and the ice generator leaves them alone), `verify()` rejects any jump into something
@@ -192,7 +213,7 @@ Ball, Lake of Rage's Rare Candy): `build.py` and readback.py read those
 event positions from the mode's patches (`ir_event_overrides`), like its block changes, and
 generate and check against the map as the Item Randomizer leaves it.
 
-S.S. Aqua (maprando/ship.py): on the ship a battle the player cannot win is a softlock, so every
+S.S. Aqua (maprando/checks/ship.py): on the ship a battle the player cannot win is a softlock, so every
 trainer on its five maps spins (the 17 standing ones become SPINRANDOM_SLOW): the player can always
 wait until a trainer looks away and walk past. Fast Ship B1F is generated and checked with the
 trainers spinning, the movement bytes are written again after the Item Randomizer, and readback.py
@@ -213,7 +234,7 @@ Doormats (warp carpets): you leave by pressing in the mat's direction, and the g
 if that step is blocked. The tile beyond every doormat keeps its vanilla block, and `verify()` and
 readback.py reject a doormat with walkable ground beyond it.
 
-Boulders (maprando/boulders.py): the requirement model treats a Strength boulder as a cell you
+Boulders (maprando/checks/boulders.py): the requirement model treats a Strength boulder as a cell you
 pass with Strength, but in the game it moves one tile per push. From every side it can be
 approached, some straight-line push (the player may stand on a ladder; the boulder may not land on
 water, a warp or an object) must leave it where everything joined through its cell stays joined.
@@ -254,7 +275,7 @@ map's unlocked blocks (`fill`). Small areas on big empty maps (Tin Tower's roof,
 span their map, are unchanged.
 
 Block style: a map's blocks are picked from every map that uses its tileset, except for maps with
-a style of their own (`OWN_STYLE` in maprando/catalog.py): Tin Tower's roof and Fast Ship B1F only
+a style of their own (`OWN_STYLE` in maprando/model/catalog.py): Tin Tower's roof and Fast Ship B1F only
 use blocks from maps with the same tileset and the same kind of area, so the roof keeps its golden
 tiles and the ship does not turn into Lighthouse stone and grass.
 
@@ -270,7 +291,7 @@ two areas. New gates (cut trees, ledges, water, one-tile object passages) are bu
 vanilla logic needs them. Grass is placed per area at roughly the vanilla amount; headbutt trees
 face walkable ground.
 
-Gyms (maprando/gym.py, `GymGenerator`): every supported gym has no requirements at all, so the
+Gyms (maprando/generators/gyms/standard.py, `GymGenerator`): every supported gym has no requirements at all, so the
 only thing that matters is the walk from the door to the leader. Violet, Azalea, Goldenrod, Pewter,
 Celadon and Fuchsia are designed from scratch on the tile grid and drawn afterwards. Only the
 entrance (statues, guide, door), scripted spots and the gym's frame (back wall, solid edge blocks)
@@ -311,7 +332,7 @@ Strength boulders are not compared in the requirement matrix (`requirement_matri
 in the generator and the readback): nothing is there, and every way past a boulder is an anchor of its
 own, so a boulder reachable only with Strength is fine. What needs Strength to reach still must.
 
-Cianwood's gate is a puzzle (test34, `optimize_gate`, maprando/pushes.py): the layouts are scored as
+Cianwood's gate is a puzzle (test34, `optimize_gate`, maprando/checks/pushes.py): the layouts are scored as
 before, then for the best two a joint search flips wall tiles (drawable blocks only) and moves the
 gate boulders for 12 x the fewest boulder moves to Chuck + the layout score. A move is a run of pushes
 of one boulder (AAABBCA is 4 moves); `min_moves` is a 0-1 search over boulder positions and the
@@ -329,14 +350,14 @@ the trap check work on bitmasks (`min_moves`, `player_traps`, `push_search`); Bl
 instead of 4. `MAPRANDO_TIMES=<file>` logs each map's time; slow maps are started first. A crash in
 one map's generator now keeps that map vanilla (logged) instead of failing the build.
 
-Ice Path B1F's boulder room from chambers (ice1, maprando/chambers.py): a chamber is a block-aligned
+Ice Path B1F's boulder room from chambers (ice1, maprando/generators/chambers.py): a chamber is a block-aligned
 piece with one doorway (and a porch tile outside it), two boulders and their two holes, designed whole -
 walls, holes and boulders together - by annealing with exact checks: the fewest boulder moves to drop
 both (`pushes.drop_moves`: A* over every boulder at once, dead spots pruned; AABACD = 5 moves), holes
 reached without pushing ('open', vanilla's holes 1-2) or not ('gated', holes 3-4, Strength), no boulder
 reaching the other's hole, the doorway or the porch, no position that shuts the player in. A library of
 236 pieces (3-4 moves each; sizes 4x4, 4x3, 3x4 blocks, every doorway side, both kinds) is made ahead by
-`tools/make_pieces.py` (resumable, about 30 minutes) into maprando/data/icepath_pieces.json. A build places
+`tools/make_pieces.py` (resumable, about 30 minutes) into maprando/data/IcePathB1F_pieces.json. A build places
 an open and a gated piece on the room's free blocks (nothing that stays vanilla may touch a piece; the
 ladders stay), picks library pieces that fit (more moves more likely), lays corridors joining both ladders
 and both porches (rock all round each piece but the porch; a long walk between them, little open floor),
@@ -365,7 +386,7 @@ are placed with the corridors. Libraries: maprando/data/<map>_pieces.json (`tool
 Blackthorn 240 pieces of 3x3, 3x4, 4x3 blocks, 3-5 moves each. Rooms take 2-7 s and need 6-8 moves
 (vanilla 6); the builder before (gymboulders) is the fallback.
 
-Ecruteak (maprando/gympit.py): the invisible floor is drawn with only four dark blocks (pits along
+Ecruteak (maprando/generators/gyms/ecruteak.py): the invisible floor is drawn with only four dark blocks (pits along
 the top, left or right, or dark wall), so a design picks one per dark block; annealing rewards the
 walk to Morty, turns on it and unseen side branches. Trainers in the dark move to corridor ends,
 looking down the corridor. Pit warps move onto the new pits (spares double up); the two pit warps
@@ -373,7 +394,7 @@ vanilla never lets you reach go on pits nobody can reach, and the one warp on pl
 tile. A pit that drops you on its own map and that no warp leads to is never an entry
 (model.arrivable), and the readback's "objects next to warps" check only counts warps you arrive by.
 
-Mahogany (maprando/gymice.py): ice designed as a grid of ice, single floor tiles (you slide onto them
+Mahogany (maprando/generators/gyms/mahogany.py): ice designed as a grid of ice, single floor tiles (you slide onto them
 and stop) and two-tile pillars, drawn with the gym's own blocks; scored by presses to Pryce (up to 2x
 vanilla), with no trap tiles, everyone reachable and stop tiles / pillars near vanilla's share; then
 checked with the real movement model (matrix, traps, trainers, jumps).
@@ -399,7 +420,7 @@ vanilla (holes, boulders and blocks moved) and runs 900 steps for Blackthorn (30
 Blackthorn 2F: about 24 of 45 blocks change, 2-3 holes and 4 boulders move (was 1-9 blocks).
 `randomize.py --reuse-maps` reuses a seed's map step from an earlier run.
 
-Blackthorn 2F from scratch (test30, maprando/gymboulders.py): every block below the top wall row is
+Blackthorn 2F from scratch (test30, maprando/generators/gyms/blackthorn.py): every block below the top wall row is
 designed anew and everything moves: both staircases and the three holes (as their own blocks), all
 six boulders, and the two trainers (walls: they stand still and see one tile). Blocks are only the
 room's own (floor; pillars along the top, left or right half; stairs; hole): other maps with this
@@ -427,7 +448,7 @@ out) fails the room: a gym has no Fly, Dig or Escape Rope. Blackthorn 2F, all si
 boulder alone and every pair together are checked (a trap needing three boulders at once would go
 unnoticed). Both builders reject trapping rooms; vanilla has none.
 
-Saffron (maprando/gympads.py): walls stay; the 30 teleport pads (15 two-way pairs between 9 rooms)
+Saffron (maprando/generators/gyms/saffron.py): walls stay; the 30 teleport pads (15 two-way pairs between 9 rooms)
 are re-paired, never two pads of one room, scoring pad hops from the entrance room to Sabrina's
 (test21: 7, vanilla 4), trainer rooms off the quickest way, and no more one-pad dead-end rooms than
 vanilla. The movement model does not follow warps within a map (each pad's requirement row covers
@@ -639,3 +660,10 @@ the like) is a door unit too: the cave tile sits in a row of wall, entered walki
 stepping down, so its block goes into unclaimed wall right above a floor block of the area outside
 (`door_units`); the tiles above it in the block (the cliff top: floor collision nobody reaches) are
 planned as wall (`cave_bids`). caves1: 208 warps moved (171 before), every check fine.
+
+## Cleanup for the web app
+
+The fallback boulder-room generators (`ScratchRoom`, `BoulderRoom`'s own search) and other code
+that builds never ran were removed; maprando was regrouped into io/model/checks/generators, the
+cave generator split into one module per step, and `Randomizer` added as the entry point. Each
+step gave a byte-identical ROM for the same seed.

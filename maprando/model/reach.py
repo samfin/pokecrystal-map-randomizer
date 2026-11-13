@@ -1,7 +1,8 @@
 """Pareto-minimal requirement search: for each entry anchor, the minimal ability sets
 needed to reach every other anchor."""
 from collections import deque
-from maprando.model.movement import ROCK_SMASH, DIRS, OPP, UP, DOWN, SURF, WATERFALL, FORCED, COLL_WATERFALL, CARPETS, COLL_PIT, COLL_ICE, LEDGE_DIRS, ABILITY_NAMES, classify, side_walls
+from maprando.model.movement import (ROCK_SMASH, DIRS, OPP, UP, DOWN, SURF, WATERFALL, FORCED, COLL_WATERFALL,
+                                     CARPETS, COLL_PIT, COLL_ICE, LEDGE_DIRS, ABILITY_NAMES, classify, side_walls)
 
 def _add(sets, cell, m):
     cur = sets.get(cell)
