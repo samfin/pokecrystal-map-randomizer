@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+
+# generated output: previews, analysis dumps, test logs (out/), built ROMs
+out/
+output/
+*.gbc
+*.sgb
+*.gb
+*.sym
+*.sav
+*.srm
+
+# scratch from debugging / profiling
+*.pkl
+*.prof
+
+# editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
