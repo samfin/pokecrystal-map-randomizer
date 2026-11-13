@@ -115,79 +115,16 @@ class PlacementMixin:
         self._comp_memo = {}
         self.devices = []   # (type, (bx,by), dir, a, b, bits)
         for (bx, by) in self.lock: self.G[by][bx] = 'LOCK'
-        placed = set()
-        # ports next to locked blocks
-        for (bx, by) in sorted(self.lock):
-            for dx, dy in D4:
-                nx, ny = bx + dx, by + dy
-                if not self.inb(nx, ny) or (nx, ny) in self.lock: continue
-                if not self.lock_side_zones(bx, by, (dx, dy)): continue
-                # zone of the vanilla neighbour's facing cells
-                zs = self.lock_side_zones(nx, ny, (-dx, -dy)) - {-1}
-                if not zs: continue
-                if len(zs) > 1: raise GenError('port touches several zones')
-                z = next(iter(zs))
-                if self.G[ny][nx] is None:
-                    if not self.can_claim(nx, ny, z): raise PortConflict((nx, ny))
-                    self.claim(nx, ny, z)
-                elif self.G[ny][nx] != ('Z', z): raise PortConflict((nx, ny))
-                placed.add(z)
+        placed = self._place_ports()
         # zones only inside locked blocks count as placed
         for z in self.Z:
             if all(((c % self.mm.w) // 2, (c // self.mm.w) // 2) in self.lock for c in self.zg.zones[z]):
                 placed.add(z)
-        def seed(z):
-            free = [(bx, by) for by in range(self.Hb) for bx in range(self.Wb) if self.can_claim(bx, by, z)]
-            if not free: return False
-            # away from what is already placed
-            def far(b):
-                return min([abs(b[0] - r[0]) + abs(b[1] - r[1]) for zz in placed for r in self.region[zz]] or [99])
-            top = max(far(b) for b in free)
-            self.claim(*rng.choice([b for b in free if far(b) >= top - 2]), z)
-            placed.add(z); return True
         if not placed:
             # every doorway moves: start the zone of the first warp somewhere
             zs = [z for _, (ws, bid, z) in sorted(self.warp_units.items())] or [self.Z[0]]
-            if not seed(zs[0]): raise GenError('no seeded zone')
-        def in_lock(c): return ((c % self.mm.w) // 2, (c // self.mm.w) // 2) in self.lock
-        def pre(p):
-            t, a, b, bits = p
-            if t == 'touch':
-                o = self.touch_objs[(min(a, b), max(a, b))]
-                return (o.x // 2, o.y // 2) in self.lock
-            # a locked gate zone realises the pair only if going through it costs no more
-            # than the pair itself (a locked cut tree is not a free ledge)
-            need = {'surf': SURF, 'ledge': 0, 'touch': 0, 'gate': bits, 'waterfall': WATERFALL | SURF,
-                    'whirl': bits | SURF, 'xgate': bits}[t]
-            gz = [(g, r) for g, r in self.objz_pairs.get((a, b), ())]
-            if t in ('surf', 'gate', 'touch', 'whirl', 'xgate'):
-                gz += [(g, r) for g, r in self.objz_pairs.get((b, a), ())]
-            if any(r & ~need == 0 and
-                   all(((c % self.mm.w) // 2, (c // self.mm.w) // 2) in self.lock for c in self.zg.zones[g])
-                   for g, r in gz):
-                return True
-            if t in ('whirl', 'xgate'): return False
-            if t == 'gate':
-                # a gate object that stays in a locked block already joins a and b
-                for cell, (kind, obits, o) in self.mm.objects.items():
-                    if kind == 'bits' and obits == bits and (o.x // 2, o.y // 2) in self.lock:
-                        if {a, b} <= self.anchor_zones.get(f'obj:{o.const or o.index}', set()): return True
-            if t == 'gate': return False   # gates are realised only by their own gate cells (above)
-            # a locked move of the right kind and direction between the two zones
-            zo = self.zg.zone_of
-            for c, es in self.cell_edges.items():
-                if not in_lock(c): continue
-                zc = zo.get(c)
-                if zc not in (a, b): continue
-                for dcell, r in es:
-                    if not in_lock(dcell): continue
-                    zd = zo.get(dcell)
-                    if zd not in (a, b) or zd == zc: continue
-                    if t == 'surf': return True
-                    if t == 'ledge' and (zc, zd) == (a, b) and r == 0: return True
-                    if t == 'waterfall' and (zc, zd) == (a, b) and r & WATERFALL: return True
-            return False
-        pending = [p for p in self.pairs if not pre(p)]
+            if not self._seed_zone(zs[0], placed, rng): raise GenError('no seeded zone')
+        pending = [p for p in self.pairs if not self._joined_in_lock(p)]
         rng.shuffle(pending)
         held = defaultdict(int)   # objects / signs that must stand inside one zone
         for aid, zs in self.anchor_zones.items():
@@ -213,35 +150,12 @@ class PlacementMixin:
         pre_frac = 0.7 if fails < 10 else 0.3 if fails < 30 else 0.0
         for z in list(placed):
             if z in self.target and pre_frac: self.grow_zone(z, rng, pre_frac)
-        progress = True
-        while progress:
-            progress = False
-            for p in list(pending):
-                t, a, b, bits = p
-                if (a in placed) == (b in placed): continue
-                src, dst = (a, b) if a in placed else (b, a)
-                ok = self.link(p, src, dst, False, rng)
-                if not ok:
-                    self.attach_fail = fails + 1
-                    raise PairError(p, f'could not attach {p}')
-                placed.add(a); placed.add(b); pending.remove(p); progress = True
-                self.grow_zone(dst, rng, 0.7)
+        self._attach_pending(pending, placed, rng, fails)
         missing = [z for z in self.Z if z not in placed]
         while missing:
             # zones joined to the rest only through warps that now move: seed them on free ground
-            if not seed(missing[0]): raise GenError(f'unplaced zones {missing}')
-            progress = True
-            while progress:
-                progress = False
-                for p in list(pending):
-                    t, a, b, bits = p
-                    if (a in placed) == (b in placed): continue
-                    src, dst = (a, b) if a in placed else (b, a)
-                    if not self.link(p, src, dst, False, rng):
-                        self.attach_fail = fails + 1
-                        raise PairError(p, f'could not attach {p}')
-                    placed.add(a); placed.add(b); pending.remove(p); progress = True
-                    self.grow_zone(dst, rng, 0.7)
+            if not self._seed_zone(missing[0], placed, rng): raise GenError(f'unplaced zones {missing}')
+            self._attach_pending(pending, placed, rng, fails)
             missing = [z for z in self.Z if z not in placed]
         self.cycle_pairs = pending   # both ends were placed independently
         # link them while there is still room between the two ends; retry the rest after growth
@@ -268,6 +182,94 @@ class PlacementMixin:
             t, a, b, _ = p
             if not self.link2(p, rng):
                 raise PairError(p, f'could not connect {p}')
+
+    def _place_ports(self):
+        """claim the free blocks beside locked blocks for the zones whose doorways they hold: the
+        set of zones placed that way. Raises PortConflict if two zones need the same block."""
+        placed = set()
+        for (bx, by) in sorted(self.lock):
+            for dx, dy in D4:
+                nx, ny = bx + dx, by + dy
+                if not self.inb(nx, ny) or (nx, ny) in self.lock: continue
+                if not self.lock_side_zones(bx, by, (dx, dy)): continue
+                # zone of the vanilla neighbour's facing cells
+                zs = self.lock_side_zones(nx, ny, (-dx, -dy)) - {-1}
+                if not zs: continue
+                if len(zs) > 1: raise GenError('port touches several zones')
+                z = next(iter(zs))
+                if self.G[ny][nx] is None:
+                    if not self.can_claim(nx, ny, z): raise PortConflict((nx, ny))
+                    self.claim(nx, ny, z)
+                elif self.G[ny][nx] != ('Z', z): raise PortConflict((nx, ny))
+                placed.add(z)
+        return placed
+
+    def _seed_zone(self, z, placed, rng):
+        """claim a free block for zone z away from what is placed already. False if none is free."""
+        free = [(bx, by) for by in range(self.Hb) for bx in range(self.Wb) if self.can_claim(bx, by, z)]
+        if not free: return False
+        def far(b):
+            return min([abs(b[0] - r[0]) + abs(b[1] - r[1]) for zz in placed for r in self.region[zz]] or [99])
+        top = max(far(b) for b in free)
+        self.claim(*rng.choice([b for b in free if far(b) >= top - 2]), z)
+        placed.add(z); return True
+
+    def _attach_pending(self, pending, placed, rng, fails):
+        """link every pending pair with one end placed to its other end, until none is left.
+        Raises PairError if a pair cannot be attached."""
+        progress = True
+        while progress:
+            progress = False
+            for p in list(pending):
+                t, a, b, bits = p
+                if (a in placed) == (b in placed): continue
+                src, dst = (a, b) if a in placed else (b, a)
+                if not self.link(p, src, dst, False, rng):
+                    self.attach_fail = fails + 1
+                    raise PairError(p, f'could not attach {p}')
+                placed.add(a); placed.add(b); pending.remove(p); progress = True
+                self.grow_zone(dst, rng, 0.7)
+
+    def _joined_in_lock(self, p):
+        """is pair p already realised inside locked blocks (a locked gate zone, gate object or move
+        of the right kind between its zones)?"""
+        def in_lock(c): return ((c % self.mm.w) // 2, (c // self.mm.w) // 2) in self.lock
+        t, a, b, bits = p
+        if t == 'touch':
+            o = self.touch_objs[(min(a, b), max(a, b))]
+            return (o.x // 2, o.y // 2) in self.lock
+        # a locked gate zone realises the pair only if going through it costs no more
+        # than the pair itself (a locked cut tree is not a free ledge)
+        need = {'surf': SURF, 'ledge': 0, 'touch': 0, 'gate': bits, 'waterfall': WATERFALL | SURF,
+                'whirl': bits | SURF, 'xgate': bits}[t]
+        gz = [(g, r) for g, r in self.objz_pairs.get((a, b), ())]
+        if t in ('surf', 'gate', 'touch', 'whirl', 'xgate'):
+            gz += [(g, r) for g, r in self.objz_pairs.get((b, a), ())]
+        if any(r & ~need == 0 and
+               all(((c % self.mm.w) // 2, (c // self.mm.w) // 2) in self.lock for c in self.zg.zones[g])
+               for g, r in gz):
+            return True
+        if t in ('whirl', 'xgate'): return False
+        if t == 'gate':
+            # a gate object that stays in a locked block already joins a and b
+            for cell, (kind, obits, o) in self.mm.objects.items():
+                if kind == 'bits' and obits == bits and (o.x // 2, o.y // 2) in self.lock:
+                    if {a, b} <= self.anchor_zones.get(f'obj:{o.const or o.index}', set()): return True
+        if t == 'gate': return False   # gates are realised only by their own gate cells (above)
+        # a locked move of the right kind and direction between the two zones
+        zo = self.zg.zone_of
+        for c, es in self.cell_edges.items():
+            if not in_lock(c): continue
+            zc = zo.get(c)
+            if zc not in (a, b): continue
+            for dcell, r in es:
+                if not in_lock(dcell): continue
+                zd = zo.get(dcell)
+                if zd not in (a, b) or zd == zc: continue
+                if t == 'surf': return True
+                if t == 'ledge' and (zc, zd) == (a, b) and r == 0: return True
+                if t == 'waterfall' and (zc, zd) == (a, b) and r & WATERFALL: return True
+        return False
 
     def nodes(self, z):
         """blocks from which zone z can be extended: its region plus locked blocks whose side has z cells."""
