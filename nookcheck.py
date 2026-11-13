@@ -3,7 +3,7 @@ from maprando.io.disasm import Disasm
 from maprando.model.movement import load_permissions, build_model, classify
 from maprando.model.catalog import Catalog
 from maprando.generators.caves import CaveGenerator, GenError
-from generate import CAVES
+from maprando.maps import CAVES
 d=Disasm('../pokecrystal-speedchoice2'); perms=load_permissions(d); cats={}
 tot=innook=false_nooks=0; locked_hidden=0
 for seed in sys.argv[1:] or ['1']:

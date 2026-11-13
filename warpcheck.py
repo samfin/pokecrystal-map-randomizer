@@ -4,7 +4,7 @@ from maprando.io.disasm import Disasm
 from maprando.model.movement import load_permissions
 from maprando.model.catalog import Catalog
 from maprando.generators.caves import CaveGenerator, GenError
-from generate import CAVES
+from maprando.maps import CAVES
 d = Disasm('../pokecrystal-speedchoice2'); perms = load_permissions(d); cats = {}
 bad = 0; total = 0
 for sd in (sys.argv[1:] or ['1', '2', '3']):

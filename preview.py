@@ -8,7 +8,7 @@ from maprando.model.movement import load_permissions
 from maprando.model.catalog import Catalog, catalog_for
 from maprando.generators.caves import CaveGenerator, GenError
 from maprando.io.render import TileRenderer
-from generate import CAVES, ICE
+from maprando.maps import CAVES, ICE
 from maprando.generators.ice import IceGenerator, IceError
 
 ap = argparse.ArgumentParser(); ap.add_argument('--seed', default='1'); ap.add_argument('--maps', nargs='*', default=CAVES)

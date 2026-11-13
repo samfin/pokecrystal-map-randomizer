@@ -9,7 +9,7 @@ from maprando.model.movement import load_permissions, build_model
 from maprando.model.catalog import Catalog
 from maprando.generators.caves import CaveGenerator, GenError
 from maprando.model.metrics import steps, openness
-from generate import ALL_MAPS, KNOWN_UNSUPPORTED
+from maprando.maps import ALL_MAPS, KNOWN_UNSUPPORTED
 
 ap = argparse.ArgumentParser(); ap.add_argument('--seed', default='1'); ap.add_argument('--maps')
 ap.add_argument('--tries', type=int, default=150); a = ap.parse_args()

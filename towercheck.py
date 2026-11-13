@@ -3,7 +3,7 @@ from maprando.io.disasm import Disasm
 from maprando.model.movement import load_permissions
 from maprando.model.catalog import Catalog
 from maprando.generators.caves import CaveGenerator, GenError
-from generate import TOWERS, ROUTES
+from maprando.maps import TOWERS, ROUTES
 d=Disasm('../pokecrystal-speedchoice2'); perms=load_permissions(d); cats={}
 names = (ROUTES if sys.argv[2:3] == ["routes"] else sys.argv[2:]) or TOWERS; seeds = sys.argv[1] if len(sys.argv) > 1 else '123'
 for n in names:

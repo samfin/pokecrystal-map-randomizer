@@ -4,7 +4,7 @@ import re, sys, os; sys.path.insert(0, '.')
 from maprando.io.disasm import Disasm
 from maprando.model.movement import load_permissions, build_model, classify, SURF
 from maprando.model.reach import Searcher, entry_starts
-from generate import CAVES
+from maprando.maps import CAVES
 
 def water_tables(d):
     s = set()

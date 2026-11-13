@@ -9,7 +9,7 @@ from maprando.model.movement import load_permissions
 from maprando.model.catalog import Catalog, catalog_for
 from maprando.generators.caves import CaveGenerator, GenError
 from maprando.generators.ice import IceGenerator, IceError
-from generate import ALL_MAPS, ROUTES, ICE, KNOWN_UNSUPPORTED
+from maprando.maps import ALL_MAPS, ROUTES, ICE, KNOWN_UNSUPPORTED
 
 ap = argparse.ArgumentParser(); ap.add_argument('--seed', default='1'); ap.add_argument('--maps')
 ap.add_argument('--profile'); a = ap.parse_args()

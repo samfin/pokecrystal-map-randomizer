@@ -9,7 +9,7 @@ from maprando.model.movement import build_model, load_permissions, dead_carpets,
 from maprando.generators.gyms.standard import GymGenerator
 from maprando.model.reach import requirement_matrix, Searcher, entry_starts, anchor_masks
 from maprando.io.rom import load_sym, events_layout, BG, OBJ, WARP, warps_at
-from generate import ALL_MAPS
+from maprando.maps import ALL_MAPS
 from maprando.checks.trainers import unsafe_trainers
 from maprando.checks.boulders import bad_boulders
 from maprando.checks.blocking import split_pairs, trainer_people_traps
@@ -17,7 +17,7 @@ from maprando.checks.scenes import blocked_walks
 from maprando.checks.jumps import bad_jumps
 from maprando.model.metrics import reachable
 from maprando.generators.ice import traps as ice_traps
-from generate import ICE
+from maprando.maps import ICE
 
 import argparse
 _ap = argparse.ArgumentParser(); _ap.add_argument('rom'); _ap.add_argument('--ir-mode')
