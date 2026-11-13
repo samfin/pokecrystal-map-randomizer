@@ -2,6 +2,8 @@
 from maprando.model.movement import classify
 
 def render(mm, rows=None, marks=None):
+    """the map model as text, one character per cell: . land, ~ water, # wall, L ledge, , grass, T a
+    cut tree or whirlpool; marks ({cell: char}) are drawn over it."""
     marks = marks or {}
     out = []
     for y in (rows or range(mm.h)):

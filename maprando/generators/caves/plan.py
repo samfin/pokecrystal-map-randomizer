@@ -4,7 +4,10 @@ from maprando.generators.caves.common import D4, GenError, LEDGE_CELLS, LEDGE_PA
 
 
 class PlanMixin:
+    """The cell plan (self.P): the block grid turned into cells, then roughened and sealed."""
     def build_plan(self, rng):
+        """the cell plan of the placed zones: every zone block as floor or water, gate devices and
+        locked blocks as in vanilla, walls elsewhere (self.P, zone per cell in self.Zc)."""
         W, H = self.Wb * 2, self.Hb * 2
         P = [['#'] * W for _ in range(H)]
         Zc = [[None] * W for _ in range(H)]
@@ -87,6 +90,9 @@ class PlanMixin:
         self.P, self.Zc = P, Zc
 
     def erode(self, rng, p_side=0.6, p_corner=0.35, check_only=False):
+        """roughen the zones' edges: wall tiles set into the floor along sides and corners where the
+        tileset can still draw the block (check_only: only check that every block can be
+        drawn)."""
         P, Zc = self.P, self.Zc
         W, H = len(P[0]), len(P)
         def legal(bx, by):

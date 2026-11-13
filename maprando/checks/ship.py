@@ -18,6 +18,7 @@ def standing_trainers(d):
             if o.obj_type == 'OBJECTTYPE_TRAINER' and 'SPIN' not in o.movement]
 
 def spin_trainers(d):
+    """make the ship's standing trainers spin in the disassembly (before generating)."""
     for n, i in standing_trainers(d): d.maps[n].objects[i].movement = SPIN
 
 def patch_spins(rom, sym, d):

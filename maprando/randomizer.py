@@ -8,6 +8,7 @@
 
 Every map is generated from its own seed, so a map comes out the same whether the maps are
 generated one after another or spread over worker processes (build.py)."""
+from __future__ import annotations
 import random
 import traceback
 from maprando.checks.boulder_room import BoulderRoom, BoulderRoomError
@@ -21,6 +22,7 @@ from maprando.generators.gyms.mahogany import IceGymGenerator
 from maprando.generators.gyms.saffron import PadGymGenerator
 from maprando.generators.gyms.standard import GymGenerator, PUZZLE_GYMS
 from maprando.generators.ice import IceGenerator, IceError
+from maprando.io.disasm import Disasm, MapInfo
 from maprando.maps import ALL_MAPS, ICE, GYMS, ROUTES, KNOWN_UNSUPPORTED
 from maprando.model.catalog import Catalog, catalog_for
 from maprando.model.movement import load_permissions
@@ -30,7 +32,7 @@ SLOW_MAPS = ['BlackthornGym2F', 'IcePathB1F', 'Route19', 'IcePath1F', 'FuchsiaGy
              'GoldenrodGym', 'CianwoodGym']
 
 
-def map_order(names=ALL_MAPS):
+def map_order(names: list[str] = ALL_MAPS) -> list[str]:
     """the maps to randomize (KNOWN_UNSUPPORTED left out), slowest first."""
     todo = [n for n in names if n not in KNOWN_UNSUPPORTED]
     return sorted(todo, key=lambda n: (SLOW_MAPS.index(n) if n in SLOW_MAPS else len(SLOW_MAPS),
@@ -46,7 +48,7 @@ class Randomizer:
     tries = 400             # cave layout attempts per map (routes: at most 150)
     chamber_tries = 4       # chamber rooms built for Blackthorn 2F (each ~2 s)
 
-    def __init__(self, disasm, overrides=None):
+    def __init__(self, disasm: Disasm, overrides: dict | None = None):
         self.d = disasm
         self.perms = load_permissions(disasm)
         self.catalogs = {}
@@ -61,7 +63,8 @@ class Randomizer:
                 e = (disasm.maps[n].bg_events if kind == 'bg' else disasm.maps[n].objects)[i]
                 e.x, e.y = x, y
 
-    def randomize_maps(self, seed, names=ALL_MAPS):
+    def randomize_maps(self, seed: str, names: list[str] = ALL_MAPS
+                       ) -> tuple[dict[str, MapInfo], dict[str, str]]:
         """randomize every map in names: ({name: new MapInfo}, {name: report}). A map whose
         generator fails stays vanilla and its report says why."""
         maps, log = {}, {n: f'vanilla ({KNOWN_UNSUPPORTED[n]})' for n in names if n in KNOWN_UNSUPPORTED}
@@ -70,7 +73,7 @@ class Randomizer:
             if m2 is not None: maps[n] = m2
         return maps, {n: log[n] for n in names}
 
-    def randomize_map(self, n, seed):
+    def randomize_map(self, n: str, seed: str) -> tuple[MapInfo | None, str]:
         """(new MapInfo or None for vanilla, report). A bug in one generator keeps that map vanilla
         instead of failing the whole build."""
         try:

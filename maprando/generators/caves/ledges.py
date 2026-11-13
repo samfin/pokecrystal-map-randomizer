@@ -4,6 +4,8 @@ from maprando.model.movement import DIRS, LEDGE_DIRS, classify
 
 
 class LedgeMixin:
+    """Ledge loops: empty ledge steps merged, areas split into parts joined by one-way ledges, long
+    ledges."""
     def merge_ledge_steps(self):
         """an area that is only a step between ledges (A drops into B, B drops only into C) and holds
         nothing (no person, item, sign, warp, door, trigger, Fly spot) is merged into C: whatever

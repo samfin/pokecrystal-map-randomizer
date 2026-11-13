@@ -6,6 +6,7 @@ from maprando.model.movement import classify
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 def people_cells(m):
+    """tiles where people stand (not item balls, boulders or rocks)."""
     return {(o.x, o.y) for o in m.objects if o.obj_type != 'OBJECTTYPE_ITEMBALL'
             and 'BOULDER' not in o.sprite and 'ROCK' not in o.sprite}
 

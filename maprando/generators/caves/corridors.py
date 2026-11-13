@@ -4,6 +4,7 @@ from maprando.generators.caves.common import D4, UnifyError
 
 
 class CorridorMixin:
+    """Corridors: land zones thinned into winding paths, and zones joined through them."""
     def corridors(self, rng, samples=6):
         """Thin every land zone into winding paths. Terminals (doorways into locked blocks, gate
         devices, one shore per Surf pair, and a pocket per item/NPC) are kept; other blocks are
@@ -243,6 +244,8 @@ class CorridorMixin:
                 self.pockets -= R
 
     def touches(self, a, b):
+        """do placed zones a and b touch: a block of one beside a block of the other (through a doorway
+        of a locked block where they meet at one)?"""
         def nodes(z):
             out = {n: None for n in self.region[z]}
             for L in self.lock:
@@ -316,6 +319,8 @@ class CorridorMixin:
         return comps
 
     def unify(self, z, rng, avoid=None):
+        """join the pieces of zone z into one (keeping clear of the doorways in avoid if possible).
+        Raises UnifyError if they cannot be joined."""
         if avoid:
             # first try to keep clear of the doorways other zones still need
             av = {b for b, zz in avoid.items() if zz != z}
@@ -379,6 +384,8 @@ class CorridorMixin:
         return False
 
     def realize_corridor(self, p, path):
+        """claim the free blocks of path for pair p (a surf shore, a gate or ledge device on the way).
+        False if some block cannot be claimed."""
         t, a, b, bits = p
         inner = [c for c in path if self.G[c[1]][c[0]] is None]
         if t == 'surf':

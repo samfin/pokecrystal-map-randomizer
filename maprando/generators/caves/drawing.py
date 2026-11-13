@@ -4,6 +4,7 @@ from maprando.generators.caves.common import D4, GenError
 
 
 class DrawingMixin:
+    """Drawing the cell plan with the tileset's real blocks."""
     def tables(self):
         """encounter tables for this map: Surf / grass / headbutt."""
         return {k: self.m.const in v for k, v in self.d.wild_maps.items()}
@@ -100,6 +101,8 @@ class DrawingMixin:
                         P[ry][x] = '.'; Zc[ry][x] = z; P[hy][x] = 'H'
 
     def pick_blocks(self, rng):
+        """a block for every free block of the plan whose cells match it (locked blocks keep
+        vanilla's): the map's new block data."""
         P = self.P
         out = bytearray(self.Wb * self.Hb)
         W, H = len(P[0]), len(P)

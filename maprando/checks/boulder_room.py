@@ -24,14 +24,20 @@ from maprando.model.reach import requirement_matrix, Searcher, entry_starts
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
-class BoulderRoomError(Exception): pass
+class BoulderRoomError(Exception):
+    """the map has no boulder room this module can read."""
 
 def stonetable(m):
+    """the map script's stonetable: [(boulder object index, hole warp index)], the hole each boulder
+    must fall through."""
     src = m.script
     consts = [o.const for o in m.objects]
     return [(consts.index(oc), int(w) - 1) for w, oc in re.findall(r'stonetable\s+(\d+),\s*(\w+)', src)]
 
 class BoulderRoom:
+    """A Strength-boulder room read from its map (Ice Path B1F, Blackthorn Gym 2F): the boulder/hole
+    pairs, the blocks free to redesign (self.free) and the room's area (self.room), plus the
+    push search shared with the generators and the checks."""
     def __init__(self, d, m, perms, cat, base=None):
         self.d, self.m, self.perms, self.cat = d, m, perms, cat
         self.base = base or m

@@ -78,6 +78,10 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
         self._analyze()
 
     def generate(self, seed, tries=200):
+        """(new map, try that found it) for a seed: up to tries attempts of place, corridors, plan,
+        objects, drawing and verify, each with its own random stream; the best of the first
+        few valid layouts wins. Raises GenError if none passes (or SignError, MergeError,
+        SplitError: see generate_cave)."""
         last = None
         from collections import Counter
         self.errors = Counter()

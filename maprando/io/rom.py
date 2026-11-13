@@ -3,12 +3,21 @@
 Generated maps keep every size and count, so the ROM layout is identical to a full rebuild:
 block data goes to <Map>_Blocks, coordinates go into the <Map>_MapEvents structure
 (see macros/scripts/maps.asm). The global header checksum is recomputed like rgbfix does."""
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from maprando.io.disasm import Disasm, MapInfo
 
 WARP, COORD, BG, OBJ = 5, 8, 5, 13
 
-def load_sym(path):
+def load_sym(path: str) -> dict[str, int]:
+    """the symbol file at path (from the romhack build): {label: ROM offset}."""
+    with open(path) as f: return parse_sym(f.read())
+
+def parse_sym(text: str) -> dict[str, int]:
+    """a symbol file's text: {label: ROM offset}."""
     sym = {}
-    for line in open(path):
+    for line in text.splitlines():
         p = line.split()
         if len(p) != 2 or ':' not in p[0]: continue
         bank, addr = (int(x, 16) for x in p[0].split(':'))
@@ -28,7 +37,10 @@ def warps_at(rom, at):
     """offset and count of the warp_event array inside a MapEvents structure."""
     return at + 3, rom[at + 2]
 
-def patch_map(rom, sym, m2):
+def patch_map(rom: bytearray, sym: dict[str, int], m2: MapInfo) -> None:
+    """write a generated map into a built ROM: its blocks, warp positions (and in-map warp
+    destinations), and event and object positions. The ROM must be built from the same source
+    (same event counts)."""
     a = sym[m2.name + '_Blocks']
     rom[a:a + len(m2.blocks)] = m2.blocks
     wa, nw = warps_at(rom, sym[m2.name + '_MapEvents'])
@@ -45,11 +57,13 @@ def patch_map(rom, sym, m2):
     for i, o in enumerate(m2.objects):
         rom[obj + i * OBJ + 1] = (o.y + 4) & 0xFF; rom[obj + i * OBJ + 2] = (o.x + 4) & 0xFF
 
-def fix_checksum(rom):
+def fix_checksum(rom: bytearray) -> None:
+    """recompute the cartridge header's global checksum."""
     s = (sum(rom) - rom[0x14E] - rom[0x14F]) & 0xFFFF
     rom[0x14E], rom[0x14F] = s >> 8, s & 0xFF
 
-def base_matches_source(rom, sym, disasm, names):
+def base_matches_source(rom: bytes, sym: dict[str, int], disasm: Disasm,
+                        names: list[str]) -> list[str]:
     """the base ROM must have been built from the current source: compare vanilla map data."""
     bad = []
     for n in names:

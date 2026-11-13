@@ -24,6 +24,8 @@ from maprando.generators.caves import GenError
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 class IceGymGenerator:
+    """Mahogany Gym: an ice floor designed tile by tile around the fixed people, by simulated annealing
+    (see the module docstring)."""
     W_PRESS, W_STOPS, W_TRAP, W_MISS, W_SHARE, W_CLUMP = 2.0, 0.03, 30.0, 25.0, 40.0, 1.5
 
     def __init__(self, d, m, perms, cache=None):
@@ -72,6 +74,7 @@ class IceGymGenerator:
 
     # ------------------------------------------------------------------ simulation
     def moves(self, g, c):
+        """the cells where the player stops, sliding from cell c on grid g in each direction."""
         W2, H2 = self.W2, self.H2
         out = []
         for dx, dy in D4:
@@ -85,6 +88,8 @@ class IceGymGenerator:
         return out
 
     def score(self, g):
+        """(score, info) of ice grid g, or None if Pryce cannot be reached; info counts the presses on
+        the quickest way (press) and the traps."""
         dist = {}
         q = deque()
         for s in self.starts: dist[s] = 0; q.append(s)
@@ -132,6 +137,7 @@ class IceGymGenerator:
 
     # ------------------------------------------------------------------ search
     def generate(self, seed, iters=None, chains=3, keep=20):
+        """the new map for a seed: the best design of a few annealing chains that passes every check."""
         iters = iters or 150 * len(self.free_tiles)
         found = []
         for k in range(chains):

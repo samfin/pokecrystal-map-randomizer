@@ -9,6 +9,7 @@ from maprando.model.zones import medium
 
 
 class AnalysisMixin:
+    """Reading the vanilla map: zones, gates, locked blocks and which warps may move."""
     def _analyze(self):
         """read the vanilla map: its zones and the gates between them (self.Z, self.pairs), the
         blocks that must keep their vanilla layout (self.lock), the warps that may move, and where

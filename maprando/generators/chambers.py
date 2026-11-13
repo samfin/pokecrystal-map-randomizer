@@ -204,6 +204,8 @@ class Piece:
         return all(c == s['door'] or g[c] == '#' for cs in self.edge.values() for c in cs)
 
     def random_state(self, rng):
+        """a random design for the piece (tiles, hole positions, door and boulders), with rock on its
+        rock edges."""
         for _ in range(200):
             s = self._random_state(rng)
             if not self.edge: return s
@@ -236,6 +238,8 @@ class Piece:
         return s
 
     def mutate(self, s, rng):
+        """a neighbouring design of s: one tile flipped, a block reshaped, a hole, the door or a
+        boulder moved."""
         t = {'tiles': dict(s['tiles']), 'hole_at': list(s['hole_at']), 'door': s['door'], 'boulders': dict(s['boulders'])}
         r = rng.random()
         if r < 0.32:
@@ -293,6 +297,8 @@ class Piece:
         return best
 
     def show(self, s):
+        """design s as text (D door, P where the player enters, o boulders, O holes), for tools and
+        debugging."""
         g, hcell = self.grid(s)
         out = []
         for y in range(self.H):

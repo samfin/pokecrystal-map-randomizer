@@ -5,6 +5,8 @@ from collections import Counter, defaultdict
 from maprando.model.movement import classify, side_walls, FORCED, COLL_PIT
 
 def cell_class(mm_like, c):
+    """a collision byte as a plan character: L<dir> ledge, W warp, v forced, , grass, H headbutt tree,
+    T cut tree, . land, ~ water, # wall."""
     if (c & 0xF0) == 0xA0: return 'L' + 'RLUDrlur'[c & 7]
     if 0x70 <= c <= 0x7f or c == COLL_PIT: return 'W'
     if c in FORCED: return 'v'
@@ -18,6 +20,9 @@ class _P:
     def __init__(self, perms): self.perms = perms
 
 class Catalog:
+    """The blocks of one tileset: each block's cell pattern and side walls, how often vanilla maps use
+    it and which blocks sit side by side. Generators draw a plan by asking it for a block with a
+    given pattern."""
     def __init__(self, disasm, tileset, perms, sample_maps):
         self.tileset = tileset
         self.coll = disasm.tileset_coll[tileset]
@@ -153,6 +158,9 @@ class Catalog:
         return bool(self.cands.get(tuple(pat)))
 
     def choose(self, pat, left, up, rng, ok=None, fw=0.7):
+        """a block whose cells match pat, preferring blocks vanilla uses for that pattern and that
+        vanilla puts next to left and up (rng breaks ties; ok filters candidates). None if
+        no block matches."""
         cs = [b for b in self.cands.get(tuple(pat), []) if ok is None or ok(b)]
         if not cs: return None
         best, bs = None, -1e9

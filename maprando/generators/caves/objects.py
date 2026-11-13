@@ -5,7 +5,11 @@ from maprando.model.movement import ROCK_SMASH, classify
 
 
 class ObjectMixin:
+    """People, item balls, rocks, boulders and hidden items placed on the plan."""
     def place_objects(self, rng):
+        """a copy of the map with every object, sign, hidden item and moving warp at a new spot in the
+        zone it belongs to (gate objects in their gates). Raises GenError if something does
+        not fit."""
         m2 = copy.deepcopy(self.m)
         P, Zc = self.P, self.Zc
         W, H = len(P[0]), len(P)

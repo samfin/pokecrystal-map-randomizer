@@ -11,6 +11,8 @@ from maprando.model.movement import classify, STRENGTH
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
 def bad_boulders(mm):
+    """the boulders (as their objects) that some side cannot get past: no push from that side moves the
+    boulder somewhere that keeps everything joined."""
     W, H = mm.w, mm.h
     objs = mm.objects
     def land(c): return classify(mm, mm.coll[c]) == 'land' and c not in mm.warp_cells

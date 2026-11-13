@@ -27,13 +27,16 @@ PLAIN_WALL = (0x07, 0x15, 0x14)
 
 
 class GymBoulderError(Exception):
-    pass
+    """no boulder room design passed the checks."""
 
 
 class BoulderGymScratch:
     # classic: the search's scoring (solution length and walls); energy() counts exact submoves
     # only when moves_of() asks for them. On HARD_MAPS the valid designs are then ranked by
     # submoves and their boulders moved for more (harder)
+    """Boulder rooms designed from scratch (Blackthorn Gym 2F, and Ice Path B1F's room with free/room
+    given): wall patterns, hole blocks and boulder spots annealed together; the chamber builder
+    (generators/chambers.py) reuses its drawing and checks."""
     classic = True
     HARD_MAPS = {'BlackthornGym2F'}     # (not Ice Path B1F's fallback)
     drop_k = K           # the exact count's weighting (pushes.K: moves first; 0: submoves only)
@@ -358,6 +361,8 @@ class BoulderGymScratch:
         return s
 
     def mutate(self, s, rng):
+        """a neighbouring design of s (one block's pattern, a hole block or a boulder moved), or None
+        if it cannot be drawn."""
         t = {'pats': dict(s['pats']), 'units': dict(s['units']), 'objs': dict(s['objs'])}
         r = rng.random()
         if r < 0.5:
@@ -448,6 +453,8 @@ class BoulderGymScratch:
         return out
 
     def draw(self, s, rng):
+        """design s drawn as a map: hole blocks and warps moved, every free block picked to match its
+        pattern and its neighbours."""
         m2 = copy.deepcopy(self.base)
         out = bytearray(m2.blocks)
         unit_at = {b: w for w, b in s['units'].items()}
@@ -484,6 +491,9 @@ class BoulderGymScratch:
         return None
 
     def generate(self, seed, chains=4, iters=8000, keep=40):
+        """the new map for a seed: the best designs of a few annealing chains, drawn and checked in
+        turn (on HARD_MAPS ranked by submoves and made harder). Raises GymBoulderError if
+        none passes."""
         rng = random.Random(f'{seed}-{self.m.name}-scratch-gym')
         found = []
         for k in range(chains):

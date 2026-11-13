@@ -20,11 +20,14 @@ from maprando.checks.jumps import bad_jumps
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 DIRNAME = {v: k for k, v in DIRS.items()}   # (dx, dy) -> direction constant
 
-class IceError(Exception): pass
+class IceError(Exception):
+    """no ice design passed the checks."""
 
 class IceGenerator:
     # objective 'shape': path_w * (slides on the quickest routes) - corner_cost * corners
     #                    - dead_end_cost * dead ends - rock_cost * rocks
+    """Ice rooms (Ice Path): rocks on open ice arranged by simulated annealing for the objective below
+    (see the module docstring)."""
     objective = 'shape'       # or 'decisions': the number of nontrivial slides (Ice Path 1F)
     path_w = 1.0
     corner_cost = 2.0    # per rock-made corner (an L-shaped pocket)
@@ -347,6 +350,8 @@ class IceGenerator:
         return corners, dead
 
     def design(self, room, rng, iters=None, blocks=None):
+        """(best design, vanilla score) for one room: blocks for room that keep every way across the
+        ice as vanilla has it; best is None if no design passed."""
         self._setup(room)
         coll = self.d.tileset_coll[self.m.tileset]
         blocks = blocks or self.m.blocks
@@ -420,6 +425,8 @@ class IceGenerator:
         return best, vscore
 
     def generate(self, seed, tries=3):
+        """(new map, 0) for a seed: every ice room designed anew (self.report says how each compares
+        with vanilla). Raises IceError if a room finds no design."""
         m2 = copy.deepcopy(self.m)
         blocks = bytearray(m2.blocks)
         self.report = []

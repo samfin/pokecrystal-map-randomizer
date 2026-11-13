@@ -3,6 +3,7 @@ from maprando.generators.caves.common import D4
 
 
 class NookMixin:
+    """One-tile dead ends for hidden items, and no stray ones elsewhere."""
     def fill_stray_nooks(self, m2, locked_cells):
         """a one-cell nook must mean 'hidden item here': fill every other one."""
         P = self.P; W, H = len(P[0]), len(P)

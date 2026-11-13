@@ -5,6 +5,8 @@ from maprando.model.movement import CUT, SURF, WATERFALL
 
 
 class PlacementMixin:
+    """Zones placed on the block grid (self.G), each next to a placed neighbour, with the gate device
+    between them."""
     def inb(self, bx, by): return 0 <= bx < self.Wb and 0 <= by < self.Hb
 
     def contact_ok(self, z1, z2):
@@ -47,6 +49,7 @@ class PlacementMixin:
         return zs
 
     def can_claim(self, bx, by, z):
+        """may zone z take free block (bx, by)? Not if it touches a zone it must stay apart from."""
         Wb, Hb, G = self.Wb, self.Hb, self.G
         if not (0 <= bx < Wb and 0 <= by < Hb) or G[by][bx] is not None or (bx, by) in self.reserved: return False
         ok = self.__dict__.get('_ok_contact')
@@ -102,6 +105,9 @@ class PlacementMixin:
         return out
 
     def place(self, rng):
+        """place every zone on the block grid: locked blocks first, then each zone next to a placed
+        neighbour through the device of their pair (Surf shore, ledge, gate, waterfall,
+        whirlpool). Raises GenError if a zone or pair does not fit."""
         self.G = [[None] * self.Wb for _ in range(self.Hb)]
         self.reserved = set()
         self.region = defaultdict(list)
@@ -355,6 +361,8 @@ class PlacementMixin:
         return False
 
     def tree(self, z, limit=600):
+        """breadth-first search over free blocks from zone z's blocks: (prev, out) - the predecessor of
+        every block reached, and the ways out found (up to limit blocks)."""
         prev = {}
         q = deque()
         for n, side in self.nodes(z):
@@ -446,6 +454,8 @@ class PlacementMixin:
         return pool[pick] if dry else pool.pop(pick)
 
     def make_device(self, t, pos, d, src_blk, dst_blk, src, dst, a, b, bits):
+        """build the gate device of type t (cut tree, rock, boulder, NPC, ledge, waterfall, whirlpool)
+        at block pos, joining zone a's block src_blk to zone b's dst_blk in direction d."""
         if t == 'gate' and bits == CUT:
             # entry side seen from the block is the side facing src: -d
             opts = self.cat.cut_opts.get(((-d[0], -d[1]), d)) or []
@@ -462,6 +472,7 @@ class PlacementMixin:
         self.devices.append((t, pos, d, src, dst, obj))
 
     def grow_zone(self, z, rng, frac):
+        """grow zone z towards frac of its target size, preferring blocks that make corridors."""
         goal = max(1, round(self.target[z] * frac))
         while len(self.region[z]) < goal:
             front = self.frontier(z)
@@ -473,6 +484,7 @@ class PlacementMixin:
             self.claim(*max(front, key=score), z)
 
     def grow(self, rng):
+        """grow every placed zone towards its target size, a block at a time in random order."""
         target = self.target
         active = [z for z in self.Z if self.region[z]]
         stuck = set()

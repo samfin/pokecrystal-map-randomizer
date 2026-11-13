@@ -58,6 +58,7 @@ def pad_rooms_ok(d, m, perms):
     return sorted(r for r in rooms if r not in seen)
 
 class PadGymGenerator:
+    """Saffron Gym: the walls stay and the teleport pads are re-paired (see the module docstring)."""
     W_HOPS, W_DETOUR, W_DEAD = 3.0, 1.0, 2.0
 
     def __init__(self, d, m, perms, cache=None):
@@ -79,6 +80,8 @@ class PadGymGenerator:
         self.van_dead = r[1]['dead'] if r else 0
 
     def score(self, pair):
+        """(score, info) of a pairing {pad: pad}, or None if some room cannot be reached; info has the
+        hops to Sabrina."""
         adj = {}
         for i, j in pair.items(): adj.setdefault(self.pads[i], []).append(self.pads[j])
         dist = {r: 0 for r in self.ent}; prev = {}
@@ -99,6 +102,7 @@ class PadGymGenerator:
         return s, dict(hops=hops, detour=detour, dead=dead)
 
     def generate(self, seed, samples=20000, keep=12):
+        """the new map for a seed: the best of many random pairings that passes every check."""
         rng = random.Random(f'{seed}-{self.m.name}-pads')
         idx = sorted(self.pads)
         found = []

@@ -1,4 +1,5 @@
 """Parsers for the pokecrystal disassembly: map sizes, tilesets, collision, blocks, events."""
+from __future__ import annotations
 import os, re
 from dataclasses import dataclass, field
 
@@ -9,30 +10,37 @@ def _args(rest):
     return [a.strip() for a in rest.split(',')]
 
 def camel_to_const(name):
+    """Route32 -> ROUTE_32, IcePathB1F -> ICE_PATH_B1F: a map label as its MAP constant."""
     s = re.sub(r'(?<=[a-z0-9])(?=[A-Z])', '_', name)
     s = re.sub(r'(?<=[A-Za-z])(?=[0-9])', '_', s)
     return s.upper()
 
 @dataclass
 class Warp:
+    """warp_event: a warp tile at (x, y) leading to warp dest_idx of dest_map."""
     x: int; y: int; dest_map: str; dest_idx: int; index: int
 
 @dataclass
 class CoordEvent:
+    """coord_event: a tile that runs script when stepped on while the map is in scene."""
     x: int; y: int; scene: str; script: str; index: int
 
 @dataclass
 class BgEvent:
+    """bg_event: a sign, hidden item or other script read by facing (x, y)."""
     x: int; y: int; kind: str; script: str; index: int
 
 @dataclass
 class ObjectEvent:
+    """object_event: a person, item ball, boulder or rock; const is its object constant."""
     x: int; y: int; sprite: str; movement: str; rx: int; ry: int
     obj_type: str; sight: int; script: str; event_flag: str; index: int
     const: str = ''
 
 @dataclass
 class MapInfo:
+    """One map as the disassembly defines it: size, tileset, blocks, connections and events. Generators
+    return a changed copy."""
     name: str            # CamelCase label, e.g. Route32
     const: str           # MAP constant, e.g. ROUTE_32
     width: int = 0       # in blocks
@@ -57,6 +65,9 @@ def _int(s):
     return int(s, 0) if s.startswith('0x') else int(s)
 
 class Disasm:
+    """The parsed pokecrystal disassembly at root: every map (self.maps), tileset collision and block
+    data, and the few data tables the randomizer needs. All files are read here, once; nothing
+    else in maprando reads them."""
     def __init__(self, root):
         self.root = root
         self.maps = {}          # name -> MapInfo
@@ -290,7 +301,7 @@ class Disasm:
                 m.objects.append(o); counters['obj'] += 1
 
 
-def load_disasm(root, cache_dir=None):
+def load_disasm(root: str, cache_dir: str | None = None) -> Disasm:
     """Disasm(root), cached on disk: parsing takes seconds and every worker process needs it.
     The cache key covers every source file's path, size and modification time, so any edit to
     the romhack invalidates it."""

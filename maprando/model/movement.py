@@ -9,6 +9,10 @@ Mirrors engine/overworld/player_movement.asm and home/map.asm (GetMovementPermis
   * Waterfall/current tiles force movement; climbing COLL_WATERFALL needs Waterfall.
   * Cut trees / whirlpools are block swaps (data/events/field_move_blocks.asm).
 """
+from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from maprando.io.disasm import Disasm, MapInfo
 import re
 from dataclasses import dataclass, field
 
@@ -37,7 +41,8 @@ COUNTERS = {0x90, 0x98}   # COLL_COUNTER: talk to whoever stands behind it
 MOVING_NPC = {'SPRITEMOVEDATA_WANDER', 'SPRITEMOVEDATA_WALK_UP_DOWN', 'SPRITEMOVEDATA_WALK_LEFT_RIGHT',
               'SPRITEMOVEDATA_SWIM_WANDER'}
 
-def load_permissions(disasm):
+def load_permissions(disasm: Disasm) -> list[int]:
+    """collision permission (LAND, WATER or WALL) of each of the 256 collision types."""
     perms = []
     for v in disasm.collision_permissions:
         perms.append(LAND if 'LAND_TILE' in v else WATER if 'WATER_TILE' in v else WALL)
@@ -45,10 +50,12 @@ def load_permissions(disasm):
     return perms
 
 def side_walls(c):
+    """the sides a one-way-wall collision type blocks (empty for others)."""
     return SIDE_WALLS[c & 7] if (c & 0xF0) in (0xB0, 0xC0) else set()
 
 @dataclass
 class Anchor:
+    """Something to reach on a map: a warp, a map-edge opening, an event or an object."""
     id: str            # stable identifier, e.g. warp:0, obj:ROUTE32_POKE_BALL1, edge:north:0
     kind: str          # warp | edge | coord | bg | obj
     cells: list        # cells that count as reaching it
@@ -59,6 +66,8 @@ class Anchor:
 
 @dataclass
 class MapModel:
+    """A map as a grid of 16x16-pixel cells (2x2 per block) with what each cell does: collision, block
+    swaps, blocking objects and anchors."""
     name: str
     w: int                       # in cells
     h: int
@@ -88,7 +97,10 @@ def dead_carpets(mm):
         if mm.inb(x, y) and classify(mm, mm.coll[mm.idx(x, y)]) is not None: out.append(wi)
     return out
 
-def build_model(disasm, m, perms=None, _raw=False):
+def build_model(disasm: Disasm, m: MapInfo, perms: list[int] | None = None,
+                _raw: bool = False) -> MapModel:
+    """the movement model of map m: collision per cell, cut/whirlpool swaps, objects that block (fixed
+    walls or ones an ability removes) and the anchors (warps, edges, events, objects)."""
     perms = perms or load_permissions(disasm)
     coll_tab = disasm.tileset_coll[m.tileset]
     W, H = m.width * 2, m.height * 2
@@ -327,6 +339,8 @@ def _edge_ok(disasm, perms, name, d, other, off, mm):
 
 
 def edge_runs(mm, d, across=None):
+    """the walkable runs of cells along map side d ('north', ...): each run is one way in from the
+    neighbouring map (across: the cells that face something walkable in the neighbour)."""
     if d == 'north': cells = [mm.idx(x, 0) for x in range(mm.w)]
     elif d == 'south': cells = [mm.idx(x, mm.h - 1) for x in range(mm.w)]
     elif d == 'west': cells = [mm.idx(0, y) for y in range(mm.h)]

@@ -49,11 +49,16 @@ ALL_GYMS = SCRATCH_GYMS + list(PUZZLE_GYMS)
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 MIRROR = {(1, 0): (-1, 0), (-1, 0): (1, 0), (0, 1): (0, 1), (0, -1): (0, -1)}
 
-def walkable(c): return c in ('.', 'W')
+def walkable(c):
+    """a plan tile the player can walk on: floor or a warp."""
+    return c in ('.', 'W')
 
 class GymGenerator:
     # weights: walk, second way, trainers watching, unreached, dead ends, lone walls, run ends,
     # open floor, wall share
+    """Trainer gyms (and Cianwood's boulder gym): the free tiles are redrawn by simulated annealing
+    around the walk to the leader, then the trainers are placed along it (see the module
+    docstring)."""
     W_WALK, W_ALT, W_WATCH, W_UNREACH, W_DEAD, W_LONE, W_ENDS, W_OPEN, W_SHARE = \
         1.0, 8.0, 5.0, 1.5, 2.0, 3.0, 0.4, 0.6, 60.0
 
@@ -177,6 +182,8 @@ class GymGenerator:
 
     # ------------------------------------------------------------------ scoring
     def score(self, g, place=True, rng=None):
+        """(score, placement, info) of floor plan g, or None if it breaks a rule; with place=True the
+        trainers are placed too (rng chooses among equal spots)."""
         W2, H2 = self.W2, self.H2
         block = {(o.x, o.y) for o in self.kept}
         lead_at = None
@@ -271,6 +278,8 @@ class GymGenerator:
 
     # ------------------------------------------------------------------ people
     def place(self, g, dist, ways, rng, units, others, goal):
+        """(spots, trainers watching) for the movable people (units) and others on plan g: trainers
+        watch the way to the goal where possible. None if they do not fit."""
         base = set(dist)
         W2 = self.W2
         def cuts(free):
@@ -425,6 +434,8 @@ class GymGenerator:
 
     # ------------------------------------------------------------------ search
     def anneal(self, rng, iters):
+        """one simulated-annealing chain over the free tiles: [(score, plan, what score() returned)] of
+        the valid designs it found."""
         W2, H2 = self.W2, self.H2
         g = [row[:] for row in self.van]
         for (x, y) in self.free_tiles: g[y][x] = '.'
@@ -721,6 +732,8 @@ class GymGenerator:
         return None
 
     def generate(self, seed, iters=None, chains=3, keep=15):
+        """the new map for a seed: the best design of a few chains that draws and passes every check
+        (self.info has the walk, watching trainers and boulder moves)."""
         if iters is None: iters = min(40 * len(self.free_tiles), 4000)   # Goldenrod: 280 tiles
         found = []
         for k in range(chains):

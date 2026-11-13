@@ -14,6 +14,7 @@ PAL = {  # light -> dark, rough GBC daytime colours
 }
 
 class TileRenderer:
+    """Draws maps of one tileset with its real tile graphics (approximate palettes), for previews."""
     def __init__(self, disasm, tileset):
         self.d = disasm
         self.meta = disasm.tileset_meta[tileset]
@@ -32,6 +33,7 @@ class TileRenderer:
         self.cache = {}
 
     def tile(self, t):
+        """8x8 image of tile number t (cached)."""
         if t in self.cache: return self.cache[t]
         if t < 0x60: idx, palidx = t, t
         elif t >= 0x80: idx, palidx = t - 0x80 + 0x60, t - 0x80 + 0x60
@@ -52,6 +54,7 @@ class TileRenderer:
         return img
 
     def render(self, m, scale=2, markers=True):
+        """image of map m at the given scale; markers draws warps, events and objects on top."""
         W, H = m.width * 32, m.height * 32
         img = Image.new('RGB', (W, H))
         for by in range(m.height):

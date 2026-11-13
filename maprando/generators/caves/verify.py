@@ -7,6 +7,7 @@ from maprando.model.reach import requirement_matrix
 
 
 class VerifyMixin:
+    """Checks a finished layout must pass; each *_ok returns None or what is wrong."""
     def terrain_stats(self, mm2):
         """reachable / present water, grass and headbutt trees outside locked blocks."""
         from maprando.model.reach import Searcher, entry_starts
@@ -175,6 +176,7 @@ class VerifyMixin:
     def edges_ok(self, mm2):
         # what matters is that you cannot get there (a tile kept walkable inside a locked block is
         # fine while nothing reaches it): reachable from some way in
+        """the outer edge tiles that must stay wall (and broken-jump pockets) are not reachable."""
         ew = getattr(self, 'edge_walls', ())
         if not ew: return None
         from maprando.model.reach import Searcher, entry_starts
@@ -195,6 +197,8 @@ class VerifyMixin:
         return f'ledge jump into a wall at {bad[0]}' if bad else None
 
     def verify(self):
+        """(True, None) if the drawn map (self.m2) has vanilla's requirement matrix and passes every
+        check, else (False, what differs)."""
         mm2 = build_model(self.d, self.m2, self.perms)
         self.last_mm2 = mm2
         w = (self.zones_reachable(mm2) or self.encounter_rules(mm2) or self.trainers_ok(mm2)

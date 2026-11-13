@@ -2,6 +2,7 @@
 import re
 
 def rewrite_events(asm_path, name, m2):
+    """rewrite the object and bg event coordinates in a map's .asm file to m2's."""
     src = open(asm_path, encoding='utf-8').read().split('\n')
     in_ev = False; oi = bi = 0
     for i, line in enumerate(src):
@@ -20,6 +21,7 @@ def rewrite_events(asm_path, name, m2):
     open(asm_path, 'w', encoding='utf-8').write('\n'.join(src))
 
 def emit(root, m2):
+    """write a generated map into the disassembly at root: its .blk file and its event coordinates."""
     import os
     with open(os.path.join(root, m2.blk_path), 'wb') as f: f.write(m2.blocks)
     rewrite_events(os.path.join(root, 'maps', m2.name + '.asm'), m2.name, m2)

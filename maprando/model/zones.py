@@ -11,9 +11,11 @@ from maprando.model.movement import SURF, classify
 ALL = (1 << 62) - 1
 
 def medium(mm, c):
+    """SURF if cell c is water (or a current), else 0."""
     return SURF if classify(mm, mm.coll[c]) in ('water', 'forced') else 0
 
 def cell_edges(mm, s=None):
+    """every step the player can take: {cell: {(next cell, abilities needed)}}."""
     s = s or Searcher(mm)
     edges = defaultdict(set)
     for c in range(mm.w * mm.h):
@@ -24,25 +26,36 @@ def cell_edges(mm, s=None):
     return edges
 
 def tarjan(nodes, succ):
+    """strongly connected components: {node: component number}. Iterative (no deep recursion, so
+    it also runs in the browser); components are numbered as recursive Tarjan numbers them."""
     index, low, on, st, comp = {}, {}, set(), [], {}
-    n = [0]; k = [0]
-    import sys
-    sys.setrecursionlimit(100000)
-    def visit(v):
-        index[v] = low[v] = n[0]; n[0] += 1; st.append(v); on.add(v)
-        for w in succ(v):
-            if w not in index: visit(w); low[v] = min(low[v], low[w])
-            elif w in on: low[v] = min(low[v], index[w])
-        if low[v] == index[v]:
-            while True:
-                w = st.pop(); on.discard(w); comp[w] = k[0]
-                if w == v: break
-            k[0] += 1
-    for v in nodes:
-        if v not in index: visit(v)
+    n = k = 0
+    for root in nodes:
+        if root in index: continue
+        index[root] = low[root] = n; n += 1; st.append(root); on.add(root)
+        work = [(root, iter(succ(root)))]
+        while work:
+            v, it = work[-1]
+            for w in it:
+                if w not in index:
+                    index[w] = low[w] = n; n += 1; st.append(w); on.add(w)
+                    work.append((w, iter(succ(w))))
+                    break
+                elif w in on: low[v] = min(low[v], index[w])
+            else:
+                work.pop()
+                if low[v] == index[v]:
+                    while True:
+                        w = st.pop(); on.discard(w); comp[w] = k
+                        if w == v: break
+                    k += 1
+                if work:
+                    u = work[-1][0]; low[u] = min(low[u], low[v])
     return comp
 
 class ZoneGraph:
+    """The cells condensed into zones (areas you walk around freely, on land or on water) joined by
+    edges labelled with the abilities a crossing needs."""
     def __init__(self, mm):
         self.mm = mm
         s = Searcher(mm)

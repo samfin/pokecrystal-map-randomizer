@@ -12,11 +12,14 @@ FACING = {'SPRITEMOVEDATA_STANDING_DOWN': (0, 1), 'SPRITEMOVEDATA_STANDING_UP': 
           'SPRITEMOVEDATA_STANDING_LEFT': (-1, 0), 'SPRITEMOVEDATA_STANDING_RIGHT': (1, 0)}
 
 def facings(o):
+    """the directions trainer o may face: its own and the flipped one (the Item Randomizer can flip
+    it), or all four for spinners."""
     f = FACING.get(o.movement)
     if f is None: return list(D4)            # spinners and anything unusual: all four
     return [f, (-f[0], -f[1])]               # its own facing and the flipped one
 
 def trainers(mm):
+    """[(cell, object)] of trainers with a line of sight."""
     out = []
     for c, (kind, bits, o) in mm.objects.items():
         if kind == 'wall' and o.obj_type == 'OBJECTTYPE_TRAINER' and int(o.sight or 0) > 0:

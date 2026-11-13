@@ -1,6 +1,8 @@
 """Pareto-minimal requirement search: for each entry anchor, the minimal ability sets
 needed to reach every other anchor."""
+from __future__ import annotations
 from collections import deque
+from maprando.model.movement import MapModel
 from maprando.model.movement import (ROCK_SMASH, DIRS, OPP, UP, DOWN, SURF, WATERFALL, FORCED, COLL_WATERFALL,
                                      CARPETS, COLL_PIT, COLL_ICE, LEDGE_DIRS, ABILITY_NAMES, classify, side_walls)
 
@@ -14,6 +16,7 @@ def _add(sets, cell, m):
     return True
 
 def minimize(masks):
+    """the minimal masks of a set of ability masks (none a superset of another), sorted."""
     out = []
     for m in sorted(set(masks), key=lambda v: bin(v).count('1')):
         if not any(e & ~m == 0 for e in out): out.append(m)
@@ -22,6 +25,8 @@ def minimize(masks):
 EJECT_DOWN = {0x71, 0x79, 0x7a, 0x7b}    # COLL_DOOR, COLL_DOOR_79, COLL_STAIRCASE, COLL_CAVE
 
 class Searcher:
+    """Moves on a map model: the neighbours of a cell with the abilities each step needs, and the
+    minimal ability sets that reach every cell from given starts."""
     def __init__(self, mm):
         self.mm = mm
         W = mm.w
@@ -47,6 +52,7 @@ class Searcher:
         return cell + self.step[d]
 
     def slide(self, cell):
+        """where a forced current or waterfall carries the player who enters cell."""
         seen = set()
         while cell not in seen:
             seen.add(cell)
@@ -148,6 +154,7 @@ class Searcher:
         return sets
 
 def entry_starts(mm, anchor):
+    """the starting cells of an entrance anchor, with SURF needed where it starts on water."""
     starts = []
     for cell in anchor.cells:
         cls = classify(mm, mm.coll[cell])
@@ -155,6 +162,8 @@ def entry_starts(mm, anchor):
     return starts
 
 def anchor_masks(mm, sets, anchor):
+    """the minimal ability masks that reach anchor, given the masks per cell (sets): it is reached by
+    standing on, next to or facing it, as its mode says."""
     masks = []
     cells = set(anchor.cells)
     if anchor.mode in ('adj', 'face'):
@@ -181,7 +190,7 @@ def boulder_ids(mm):
     return {f'obj:{o.const or o.index}' for (kind, bits, o) in mm.objects.values()
             if kind == 'bits' and bits == STRENGTH and 'BOULDER' in getattr(o, 'sprite', '')}
 
-def requirement_matrix(mm, boulders=True):
+def requirement_matrix(mm: MapModel, boulders: bool = True) -> dict[str, dict[str, list[int]]]:
     """{entry_id: {anchor_id: [masks]}}; unreachable anchors are omitted. boulders=False leaves the
     Strength boulders out (as anchors; they still gate everything else)."""
     s = Searcher(mm)
@@ -199,6 +208,7 @@ def requirement_matrix(mm, boulders=True):
     return out
 
 def mask_names(mm, m):
+    """ability mask m as names (abilities and the objects that gate the map)."""
     names = [n for b, n in ABILITY_NAMES.items() if m & b]
     names += [f'obj:{n}' for b, n in mm.obj_bits.items() if m & b]
     return names

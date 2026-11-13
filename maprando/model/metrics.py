@@ -37,6 +37,7 @@ def steps(mm):
     return (tot / n if n else 0), (sum(far) / len(far) if far else 0)
 
 def reachable(mm):
+    """every cell reachable from an entrance with every ability."""
     s = Searcher(mm); seen = set(); q = deque()
     for e in mm.anchors:
         if e.is_entry:

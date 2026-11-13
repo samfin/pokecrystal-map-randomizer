@@ -24,6 +24,8 @@ D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 PIT = 0x60
 
 class PitGymGenerator:
+    """Ecruteak Gym: picks one of four dark blocks (pits top/left/right, or solid) for every dark block
+    of the gym, by simulated annealing (see the module docstring)."""
     W_WALK, W_TURN, W_DECOY, W_LOST = 1.0, 0.8, 1.5, 0.0
 
     def __init__(self, d, m, perms, cache=None):
@@ -76,6 +78,8 @@ class PitGymGenerator:
         return g
 
     def score(self, choice):
+        """(score, info) of a choice of dark blocks, or None if it breaks a rule (a person or warp off
+        the floor, an unreachable pit, a changed requirement)."""
         g = self.grid(choice)
         W2, H2 = self.W2, self.H2
         if any(g[y][x] != '.' for (x, y) in self.people | self.floor_warps): return None
@@ -154,6 +158,7 @@ class PitGymGenerator:
         return s, dict(walk=len(path), watched=watched, turns=turns, decoys=decoy, pits=len(pits), lost=lost, extra=extra)
 
     def build(self, choice):
+        """the map drawn with a choice of dark blocks, the pit warps moved onto the new pits."""
         m2 = copy.deepcopy(self.m)
         out = bytearray(m2.blocks)
         for (bx, by), b in zip(self.free_blocks, choice): out[by * self.W + bx] = b
@@ -172,6 +177,8 @@ class PitGymGenerator:
         return m2
 
     def generate(self, seed, iters=6000, chains=3, keep=20):
+        """the new map for a seed: the best of a few annealing chains that passes every check
+        (self.info says how long the walk is)."""
         van = [self.m.blocks[by * self.W + bx] for (bx, by) in self.free_blocks]
         r = self.score(van)
         self.cap = max(r[1]['walk'] * 1.6, r[1]['walk'] + 10) if r else 40
