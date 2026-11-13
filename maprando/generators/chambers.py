@@ -12,14 +12,14 @@ be designed on its own: from the porch, with the exact checks a small room allow
 The room's moves are the sum of its pieces' (pieces never share a boulder or a way)."""
 import math, random
 from collections import deque
-from .pushes import drop_moves, K
+from maprando.checks.pushes import drop_moves, K
 # maps whose pieces are chosen by their fewest submoves (`fewest_submoves`, tools/subscore_pieces.py)
 SUBMOVE_MAPS = {'BlackthornGym2F'}
-from .boulderroom import player_traps
+from maprando.checks.boulder_room import player_traps
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 import os as _os
-DATA = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'data')
+DATA = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'data')
 def library_path(name): return _os.path.join(DATA, f'{name}_pieces.json')
 LIBRARY = library_path('IcePathB1F')
 # piece sizes (blocks) per map: Blackthorn 2F is only 5 blocks wide

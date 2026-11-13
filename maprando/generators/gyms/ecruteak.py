@@ -13,12 +13,12 @@ then move onto the new pits (any spare ones double up on a pit). Each design is 
 real movement model: same requirement matrix, no trap tiles, no trainer that can trap you."""
 import copy, math, random
 from collections import deque
-from .model import build_model, classify
-from .reach import requirement_matrix
-from .ice import traps
-from .trainers import unsafe_trainers
-from .gen import GenError
-from .trainers import FACING
+from maprando.model.movement import build_model, classify
+from maprando.model.reach import requirement_matrix
+from maprando.generators.ice import traps
+from maprando.checks.trainers import unsafe_trainers
+from maprando.generators.caves import GenError
+from maprando.checks.trainers import FACING
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 PIT = 0x60

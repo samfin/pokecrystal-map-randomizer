@@ -5,7 +5,7 @@ the player can always wait until it looks away and walk past. Standing trainers 
 become SPINRANDOM_SLOW; those that already spin are left as they are. The movement byte is set in
 the disasm before generation (so FastShipB1F is generated and checked with spinning trainers) and
 written into the ROM again after the Item Randomizer, which may rewrite trainer records."""
-from .patch import events_layout, OBJ
+from maprando.io.rom import events_layout, OBJ
 
 SHIP_MAPS = ['FastShip1F', 'FastShipB1F', 'FastShipCabins_NNW_NNE_NE', 'FastShipCabins_SW_SSW_NW',
              'FastShipCabins_SE_SSE_CaptainsCabin']

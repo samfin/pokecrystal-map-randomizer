@@ -2,9 +2,9 @@
 """Phase 0: extract per-map requirement matrices from the disassembly."""
 import argparse, json, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from maprando.parse import Disasm
-from maprando.model import build_model, load_permissions
-from maprando.reach import requirement_matrix, mask_names
+from maprando.io.disasm import Disasm
+from maprando.model.movement import build_model, load_permissions
+from maprando.model.reach import requirement_matrix, mask_names
 
 def main():
     ap = argparse.ArgumentParser()

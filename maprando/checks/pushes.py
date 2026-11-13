@@ -189,9 +189,9 @@ def drop_moves(W, floor, boulders, own, starts, boxonly=frozenset(), limit=30000
 def gym_puzzle(d, m2, perms):
     """the finished map's Strength puzzle (Cianwood Gym): (fewest boulder moves to the leader or
     None, positions explored, positions that shut the player in)."""
-    from .model import build_model, classify
-    from .boulderroom import player_traps
-    from .gym import GYM_LEADERS
+    from maprando.model.movement import build_model, classify
+    from maprando.checks.boulder_room import player_traps
+    from maprando.generators.gyms.standard import GYM_LEADERS
     mm = build_model(d, m2, perms)
     W = mm.w
     people = {mm.idx(o.x, o.y) for o in m2.objects if 'BOULDER' not in o.sprite and mm.inb(o.x, o.y)}
@@ -215,8 +215,8 @@ def gym_puzzle(d, m2, perms):
 def room_submoves(d, m, m2, perms):
     """a finished boulder room's puzzle (Ice Path B1F, Blackthorn 2F) as readback counts it: the
     fewest submoves that drop every boulder into its own hole (None if not counted)"""
-    from .model import build_model, classify
-    from .boulderroom import stonetable
+    from maprando.model.movement import build_model, classify
+    from maprando.checks.boulder_room import stonetable
     mm = build_model(d, m2, perms); W = mm.w; pairs = stonetable(m)
     ppl = {mm.idx(o.x, o.y) for o in m2.objects if 'BOULDER' not in o.sprite and mm.inb(o.x, o.y)}
     fl = {c for c in range(W * mm.h) if classify(mm, mm.coll[c]) == 'land' and c not in mm.warp_cells and c not in ppl}

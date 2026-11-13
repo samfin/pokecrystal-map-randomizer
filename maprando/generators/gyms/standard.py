@@ -23,10 +23,10 @@ The design is made on the tile grid first and drawn afterwards (abstract first, 
 The best designs go through CaveGenerator.verify (requirement matrix and every other rule)."""
 import copy, math, random
 from collections import deque
-from .catalog import Catalog, catalog_for
-from .trainers import FACING
-from .gen import CaveGenerator, GenError
-from .model import STRENGTH
+from maprando.model.catalog import Catalog, catalog_for
+from maprando.checks.trainers import FACING
+from maprando.generators.caves import CaveGenerator, GenError
+from maprando.model.movement import STRENGTH
 
 GYM_LEADERS = {'SPRITE_FALKNER', 'SPRITE_BUGSY', 'SPRITE_WHITNEY', 'SPRITE_JASMINE', 'SPRITE_BROCK',
                'SPRITE_MISTY', 'SPRITE_SURGE', 'SPRITE_ERIKA', 'SPRITE_JANINE', 'SPRITE_SABRINA',
@@ -578,7 +578,7 @@ class GymGenerator:
         """the fewest submoves (runs of one boulder pushed one way) to reach the leader with the gate
         boulders at `cells` ({object index: tile}); 0 if the gate shuts nothing or a boulder is off
         the reachable floor, None if it cannot be opened"""
-        from .pushes import min_moves
+        from maprando.checks.pushes import min_moves
         W2, H2 = self.W2, self.H2
         key = (tuple(''.join(r) for r in g), frozenset(cells.values()))
         if key in memo: return memo[key]
@@ -613,8 +613,8 @@ class GymGenerator:
         always reachable again) and people stand outside / inside the gate as in vanilla (any other
         area behind boulders is extra, like a ledge's). Returns (moves, grid, {object index: cell})
         or None."""
-        from .pushes import min_moves
-        from .boulderroom import player_traps
+        from maprando.checks.pushes import min_moves
+        from maprando.checks.boulder_room import player_traps
         W2, H2 = self.W2, self.H2
         block = {(o.x, o.y) for o in self.kept}
         g = [list(row) for row in g]
@@ -773,7 +773,7 @@ class GymGenerator:
                 # every Strength gate (designed for moves or not): solvable push by push, and no
                 # position shuts the player in
                 # the drawn map's puzzle, push by push, as the readback checks it
-                from .pushes import gym_puzzle
+                from maprando.checks.pushes import gym_puzzle
                 mv, st, tr = gym_puzzle(self.d, m2, self.perms)
                 if mv is None or st is None or tr: ok, why = False, f'Strength puzzle: moves {mv}, traps {tr} of {st}'
                 elif self.lone_boulders(self.gate_cells(m2)):

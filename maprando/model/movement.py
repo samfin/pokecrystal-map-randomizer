@@ -288,7 +288,7 @@ def _world_reach(disasm, perms):
     key = '_world_reach'
     if key in disasm.__dict__: return disasm.__dict__[key]
     from collections import deque
-    from .reach import Searcher, entry_starts
+    from maprando.model.reach import Searcher, entry_starts
     FULL = (1 << 40) - 1
     over = [n for n, mp in disasm.maps.items() if mp.connections and mp.blocks]
     mms = {n: build_model(disasm, disasm.maps[n], perms, _raw=True) for n in over}

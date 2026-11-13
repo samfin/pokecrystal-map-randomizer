@@ -3,13 +3,13 @@
 import argparse, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from PIL import Image, ImageDraw
-from maprando.parse import Disasm, load_disasm
-from maprando.model import load_permissions
-from maprando.catalog import Catalog, catalog_for
-from maprando.gen import CaveGenerator, GenError
-from maprando.render import TileRenderer
+from maprando.io.disasm import Disasm, load_disasm
+from maprando.model.movement import load_permissions
+from maprando.model.catalog import Catalog, catalog_for
+from maprando.generators.caves import CaveGenerator, GenError
+from maprando.io.render import TileRenderer
 from generate import CAVES, ICE
-from maprando.ice import IceGenerator, IceError
+from maprando.generators.ice import IceGenerator, IceError
 
 ap = argparse.ArgumentParser(); ap.add_argument('--seed', default='1'); ap.add_argument('--maps', nargs='*', default=CAVES)
 a = ap.parse_args()

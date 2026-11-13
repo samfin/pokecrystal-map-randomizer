@@ -15,12 +15,12 @@ Valid designs are scored by the length of the solution (pushes, turns) and how m
 walled into corridors; the best are drawn and kept only if the drawn map's requirement matrix is
 vanilla's and the boulder-room check passes."""
 import copy, math, random, time
-from .pushes import K
+from maprando.checks.pushes import K
 from collections import deque
-from .model import build_model
-from .reach import requirement_matrix
-from .catalog import Catalog
-from .boulderroom import stonetable, BoulderRoom, bad_boulder_room
+from maprando.model.movement import build_model
+from maprando.model.reach import requirement_matrix
+from maprando.model.catalog import Catalog
+from maprando.checks.boulder_room import stonetable, BoulderRoom, bad_boulder_room
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 PLAIN_WALL = (0x07, 0x15, 0x14)
@@ -335,7 +335,7 @@ class BoulderGymScratch:
         if self.classic: return 0, score + 0.15 * walls
         # boulder moves (runs of one boulder's pushes) count most: the fewest that drop every
         # boulder in one go (exact search), else the solver's own count
-        from .pushes import drop_moves, K
+        from maprando.checks.pushes import drop_moves, K
         ex_moves = drop_moves(self.W, walkS, {i: objs[i] for i in self.boulders}, own, sorted(ent),
                               boxonly=stc, limit=20000, detail=True, weight=self.drop_k)
         subs = 0
@@ -479,7 +479,7 @@ class BoulderGymScratch:
         if requirement_matrix(mm2, boulders=False) != self.vmatrix: return 'requirements differ'
         bad = bad_boulder_room(self.d, self.m, m2, self.perms, self.cat)
         if bad: return str(bad)
-        from .trainers import unsafe_trainers
+        from maprando.checks.trainers import unsafe_trainers
         if unsafe_trainers(mm2): return 'trainer trap'
         return None
 

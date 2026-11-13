@@ -4,11 +4,11 @@
     python3 timing.py --seed S [--maps A,B] [--profile out.prof]"""
 import argparse, cProfile, os, pstats, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-from maprando.parse import Disasm, load_disasm
-from maprando.model import load_permissions
-from maprando.catalog import Catalog, catalog_for
-from maprando.gen import CaveGenerator, GenError
-from maprando.ice import IceGenerator, IceError
+from maprando.io.disasm import Disasm, load_disasm
+from maprando.model.movement import load_permissions
+from maprando.model.catalog import Catalog, catalog_for
+from maprando.generators.caves import CaveGenerator, GenError
+from maprando.generators.ice import IceGenerator, IceError
 from generate import ALL_MAPS, ROUTES, ICE, KNOWN_UNSUPPORTED
 
 ap = argparse.ArgumentParser(); ap.add_argument('--seed', default='1'); ap.add_argument('--maps')

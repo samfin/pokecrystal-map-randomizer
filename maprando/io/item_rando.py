@@ -1,7 +1,7 @@
 """Events whose bytes the Item Randomizer rewrites (from its label/address lists).
 Their coordinates may be overwritten after we run, so they must keep their vanilla spot."""
 import json, os
-from .patch import events_layout, BG, OBJ
+from maprando.io.rom import events_layout, BG, OBJ
 
 
 def mode_patch_files(ir_root, mode_path):

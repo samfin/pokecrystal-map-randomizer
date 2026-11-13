@@ -6,10 +6,10 @@ to a map's library as `fewest_submoves`; pieces that no longer pass are dropped.
 import argparse, collections, json, os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
-from maprando.parse import load_disasm
-from maprando.model import load_permissions
-from maprando.gymboulders import BoulderGymScratch
-from maprando.chambers import Piece, library_path, piece_kinds, rock_sides_for
+from maprando.io.disasm import load_disasm
+from maprando.model.movement import load_permissions
+from maprando.generators.gyms.blackthorn import BoulderGymScratch
+from maprando.generators.chambers import Piece, library_path, piece_kinds, rock_sides_for
 ap = argparse.ArgumentParser(); ap.add_argument('--map', default='BlackthornGym2F'); ap.add_argument('--budget', type=float, default=160)
 a = ap.parse_args()
 d = load_disasm(os.path.join(ROOT, '..', 'pokecrystal-speedchoice2')); p = load_permissions(d)

@@ -291,7 +291,7 @@ def load_disasm(root, cache_dir=None):
     for f in (os.path.join('data', 'tilesets.asm'), os.path.join('gfx', 'tilesets.asm')):
         if os.path.exists(os.path.join(root, f)):
             st = os.stat(os.path.join(root, f)); h.update(f'{f}|{st.st_size}|{st.st_mtime_ns}'.encode())
-    cache_dir = cache_dir or os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'out', '.cache')
+    cache_dir = cache_dir or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'out', '.cache')
     path = os.path.join(cache_dir, f'disasm-{h.hexdigest()[:16]}.pkl')
     try:
         with open(path, 'rb') as f: d = pickle.load(f)

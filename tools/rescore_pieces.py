@@ -4,12 +4,12 @@
 import json, os, sys, collections
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
-from maprando.parse import load_disasm
-from maprando.model import load_permissions
-from maprando.catalog import Catalog
-from maprando.boulderroom import BoulderRoom
-from maprando.gymboulders import BoulderGymScratch
-from maprando.chambers import Piece, LIBRARY  # (Ice Path B1F)
+from maprando.io.disasm import load_disasm
+from maprando.model.movement import load_permissions
+from maprando.model.catalog import Catalog
+from maprando.checks.boulder_room import BoulderRoom
+from maprando.generators.gyms.blackthorn import BoulderGymScratch
+from maprando.generators.chambers import Piece, LIBRARY  # (Ice Path B1F)
 d = load_disasm(os.path.join(ROOT, '..', 'pokecrystal-speedchoice2')); p = load_permissions(d)
 m = d.maps['IcePathB1F']; br = BoulderRoom(d, m, p, Catalog(d, m.tileset, p, [m]))
 g = BoulderGymScratch(d, m, p, free=br.free, room=br.room, move_stairs=False)

@@ -1,7 +1,7 @@
 """Layout metrics: how far you walk, and how much of the land is wide open."""
 from collections import deque
-from .model import classify
-from .reach import Searcher, entry_starts
+from maprando.model.movement import classify
+from maprando.model.reach import Searcher, entry_starts
 
 ALL = (1 << 40) - 1
 

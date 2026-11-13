@@ -10,12 +10,12 @@ from the same seeds."""
 import argparse, json, os, random, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)
-from maprando.parse import load_disasm
-from maprando.model import load_permissions
-from maprando.catalog import Catalog
-from maprando.boulderroom import BoulderRoom
-from maprando.gymboulders import BoulderGymScratch
-from maprando.chambers import Piece, library_path, SIZES_FOR, SIDES, piece_kinds, rock_sides_for
+from maprando.io.disasm import load_disasm
+from maprando.model.movement import load_permissions
+from maprando.model.catalog import Catalog
+from maprando.checks.boulder_room import BoulderRoom
+from maprando.generators.gyms.blackthorn import BoulderGymScratch
+from maprando.generators.chambers import Piece, library_path, SIZES_FOR, SIDES, piece_kinds, rock_sides_for
 
 ap = argparse.ArgumentParser(); ap.add_argument('--per', type=int, default=10); ap.add_argument('--budget', type=float, default=160)
 ap.add_argument('--min-moves', type=int, default=3); ap.add_argument('--map', default='IcePathB1F')

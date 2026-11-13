@@ -5,8 +5,8 @@ whose requirement equals the terrain's own medium requirement (0 on land, Surf o
 Edges between zones carry the requirement of the step (ledge jumps are one-way, Surf for
 land->water, Waterfall climbs, object bits for rocks/boulders/NPC blockers)."""
 from collections import defaultdict
-from .reach import Searcher
-from .model import SURF, classify
+from maprando.model.reach import Searcher
+from maprando.model.movement import SURF, classify
 
 ALL = (1 << 62) - 1
 

@@ -2,7 +2,7 @@
 actually use, and how often blocks sit next to each other (for visual coherence)."""
 import math
 from collections import Counter, defaultdict
-from .model import classify, side_walls, FORCED, COLL_PIT
+from maprando.model.movement import classify, side_walls, FORCED, COLL_PIT
 
 def cell_class(mm_like, c):
     if (c & 0xF0) == 0xA0: return 'L' + 'RLUDrlur'[c & 7]
@@ -34,8 +34,8 @@ class Catalog:
                     if x + 1 < W: self.H[(b[y*W+x], b[y*W+x+1])] += 1
                     if y + 1 < Hh: self.V[(b[y*W+x], b[(y+1)*W+x])] += 1
         # usage patterns: like self.pattern but passable cells that no entry can reach are 'V' (void)
-        from .model import build_model
-        from .reach import Searcher, entry_starts
+        from maprando.model.movement import build_model
+        from maprando.model.reach import Searcher, entry_starts
         self.usage = Counter()
         near_warp = Counter(); total = Counter()
         for m in sample_maps:

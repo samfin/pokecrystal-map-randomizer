@@ -1,8 +1,8 @@
 import sys; sys.path.insert(0,'.')
-from maprando.parse import Disasm
-from maprando.model import load_permissions, build_model, classify
-from maprando.catalog import Catalog
-from maprando.gen import CaveGenerator, GenError
+from maprando.io.disasm import Disasm
+from maprando.model.movement import load_permissions, build_model, classify
+from maprando.model.catalog import Catalog
+from maprando.generators.caves import CaveGenerator, GenError
 from generate import CAVES
 d=Disasm('../pokecrystal-speedchoice2'); perms=load_permissions(d); cats={}
 tot=innook=false_nooks=0; locked_hidden=0
@@ -12,7 +12,7 @@ for seed in sys.argv[1:] or ['1']:
     try: g=CaveGenerator(d,m,perms,cats[m.tileset]); m2,_=g.generate(seed,150)
     except GenError: continue
     mm=build_model(d,m2,perms)
-    from maprando.reach import Searcher, entry_starts
+    from maprando.model.reach import Searcher, entry_starts
     sr=Searcher(mm); reach=set(sr.search([st for a in mm.anchors if a.is_entry for st in entry_starts(mm,a)]))
     def walk(x,y): return mm.inb(x,y) and classify(mm,mm.coll[mm.idx(x,y)])=='land'
     hidden={(b.x,b.y) for b in m2.bg_events if b.kind=='BGEVENT_ITEM'}

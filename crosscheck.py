@@ -8,9 +8,9 @@ randomizable map, compare:
 """
 import glob, json, os, re, sys, yaml
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from maprando.parse import Disasm
-from maprando.model import build_model, load_permissions, ABILITY_NAMES
-from maprando.reach import requirement_matrix
+from maprando.io.disasm import Disasm
+from maprando.model.movement import build_model, load_permissions, ABILITY_NAMES
+from maprando.model.reach import requirement_matrix
 
 GEOM = set(ABILITY_NAMES.values())
 HERE = os.path.dirname(os.path.abspath(__file__))

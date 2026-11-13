@@ -97,7 +97,7 @@ def scene_starters(m, src):
 def blocked_walks(mv, m, mm2, m2, src):
     """scripted walks that are open in vanilla but blocked in the new layout (a tile became
     impassable, or another object stands on the path)."""
-    from .model import classify
+    from maprando.model.movement import classify
     bad = []
     others = {(o.x, o.y): o.const for o in m2.objects}
     for name, path, margin in scripted_paths(m, src):

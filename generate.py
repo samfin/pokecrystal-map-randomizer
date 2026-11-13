@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import argparse, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from maprando.parse import Disasm
-from maprando.model import load_permissions
-from maprando.catalog import Catalog, catalog_for
-from maprando.gen import CaveGenerator, GenError
+from maprando.io.disasm import Disasm
+from maprando.model.movement import load_permissions
+from maprando.model.catalog import Catalog, catalog_for
+from maprando.generators.caves import CaveGenerator, GenError
 
 CAVES = ['UnionCave1F', 'UnionCaveB1F', 'UnionCaveB2F', 'DarkCaveVioletEntrance', 'DarkCaveBlackthornEntrance',
          'MountMortar1FInside', 'MountMortar2FInside', 'MountMortarB1F', 'RockTunnel1F', 'RockTunnelB1F',
@@ -70,7 +70,7 @@ OTHERS = ['Route23', 'SilverCaveOutside', 'LakeOfRage', 'MountMoonSquare', 'Unde
 # (little or no room to change, or no layout found)
 
 # gyms: drawn from scratch around the walk to the leader (maprando/gym.py says which and why)
-from maprando.gym import ALL_GYMS as GYMS
+from maprando.generators.gyms.standard import ALL_GYMS as GYMS
 
 ALL_MAPS = CAVES + ROUTES + ICE + OTHERS + GYMS
 

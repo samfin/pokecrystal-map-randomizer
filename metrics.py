@@ -4,11 +4,11 @@
     python3 metrics.py [--seed S] [--maps A,B] [--tries N]"""
 import argparse, os, sys, time
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-from maprando.parse import Disasm, load_disasm
-from maprando.model import load_permissions, build_model
-from maprando.catalog import Catalog
-from maprando.gen import CaveGenerator, GenError
-from maprando.metrics import steps, openness
+from maprando.io.disasm import Disasm, load_disasm
+from maprando.model.movement import load_permissions, build_model
+from maprando.model.catalog import Catalog
+from maprando.generators.caves import CaveGenerator, GenError
+from maprando.model.metrics import steps, openness
 from generate import ALL_MAPS, KNOWN_UNSUPPORTED
 
 ap = argparse.ArgumentParser(); ap.add_argument('--seed', default='1'); ap.add_argument('--maps')

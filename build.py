@@ -22,7 +22,7 @@ def prepare_work(src, work):
     mark = os.path.join(work, MARK)
     if os.path.exists(mark) and open(mark).read().strip() == src:
         # restore every file a previous run may have rewritten
-        from maprando.parse import Disasm
+        from maprando.io.disasm import Disasm
         d = Disasm(src)
         for n in ALL_MAPS:
             m = d.maps[n]
@@ -43,18 +43,18 @@ def _work_init(src, overrides=None, cache_path=None, worker=False):
         # Ctrl+C is for the main process: it stops the pool (workers would only print tracebacks)
         import signal
         signal.signal(signal.SIGINT, signal.SIG_IGN)
-    from maprando.parse import Disasm
-    from maprando.model import load_permissions
+    from maprando.io.disasm import Disasm
+    from maprando.model.movement import load_permissions
     import pickle
     d = None
     if cache_path and os.path.exists(cache_path):
         try:
-            from maprando.parse import _reroot
+            from maprando.io.disasm import _reroot
             with open(cache_path, 'rb') as f: d = pickle.load(f)
             _reroot(d, os.path.abspath(src))
         except Exception: d = None
     _W['d'] = d or Disasm(src); _W['perms'] = load_permissions(_W['d']); _W['cats'] = {}
-    from maprando.ship import spin_trainers
+    from maprando.checks.ship import spin_trainers
     spin_trainers(_W['d'])      # S.S. Aqua trainers spin: generate and check with that
     for n, blocks in (overrides or {}).items():
         if n == '__events__': continue
@@ -96,15 +96,15 @@ def _work(job):
     return r
 
 def _work1(job):
-    from maprando.catalog import Catalog, catalog_for
-    from maprando.gen import GenError
+    from maprando.model.catalog import Catalog, catalog_for
+    from maprando.generators.caves import GenError
     n, seed, tries = job
     d, perms, cats = _W['d'], _W['perms'], _W['cats']
     m = d.maps[n]
     cat = catalog_for(d, m, perms, cats)
     try:
         if n in ICE:
-            from maprando.ice import IceGenerator, IceError
+            from maprando.generators.ice import IceGenerator, IceError
             ig = IceGenerator(d, m, perms)
             if n == 'IcePath1F':
                 # as many decisions as possible (forced slides, at corners, are free), rocks never
@@ -114,12 +114,12 @@ def _work1(job):
             except IceError as e: return n, None, f'vanilla ({e})'
             if n == 'IcePathB1F':
                 # the Strength-boulder room: new walls, boulder spots and holes (maprando/boulderroom.py)
-                from maprando.boulderroom import BoulderRoom, BoulderRoomError
+                from maprando.checks.boulder_room import BoulderRoom, BoulderRoomError
                 # built from chambers: small pieces designed whole (walls, holes and boulders
                 # together) for the most boulder moves, joined by corridors (maprando/chambers.py)
                 import random as _r
-                from maprando.gymboulders import BoulderGymScratch, GymBoulderError
-                from maprando.chambers import build_room
+                from maprando.generators.gyms.blackthorn import BoulderGymScratch, GymBoulderError
+                from maprando.generators.chambers import build_room
                 built = None
                 try:
                     br_ = BoulderRoom(d, m, perms, Catalog(d, m.tileset, perms, [m]), base=m2)
@@ -133,18 +133,18 @@ def _work1(job):
                     return n, built[0], f'randomized (boulder room from chambers: {built[1][0]} boulder moves, {built[1][1]} submoves)'
                 return n, m2, 'randomized (ice only; boulder room kept: no chamber room found)'
         elif n in GYMS:
-            from maprando.gym import GymGenerator, PUZZLE_GYMS
+            from maprando.generators.gyms.standard import GymGenerator, PUZZLE_GYMS
             kind = PUZZLE_GYMS.get(n)
             if kind == 'pit':
-                from maprando.gympit import PitGymGenerator
+                from maprando.generators.gyms.ecruteak import PitGymGenerator
                 g = PitGymGenerator(d, m, perms); m2 = g.generate(seed)
                 return n, m2, 'randomized (invisible floor: walk %(walk)d, %(turns)d turns)' % g.info
             if kind == 'pads':
-                from maprando.gympads import PadGymGenerator
+                from maprando.generators.gyms.saffron import PadGymGenerator
                 g = PadGymGenerator(d, m, perms); m2 = g.generate(seed)
                 return n, m2, 'randomized (pads re-paired: %(hops)d hops to the leader)' % g.info
             if kind == 'ice':
-                from maprando.gymice import IceGymGenerator
+                from maprando.generators.gyms.mahogany import IceGymGenerator
                 g = IceGymGenerator(d, m, perms); m2 = g.generate(seed)
                 return n, m2, 'randomized (ice: %(press)d presses to the leader)' % g.info
             if kind == 'boulders':
@@ -152,10 +152,10 @@ def _work1(job):
                 if n == 'BlackthornGym2F':
                     # built from chambers (library pieces with the boulders, gate boulders inside;
                     # stairs and trainers in the corridors: maprando/chambers.py)
-                    from maprando.gymboulders import BoulderGymScratch, GymBoulderError
-                    from maprando.chambers import build_room
+                    from maprando.generators.gyms.blackthorn import BoulderGymScratch, GymBoulderError
+                    from maprando.generators.chambers import build_room
                     import random as _r
-                    from maprando.pushes import room_submoves
+                    from maprando.checks.pushes import room_submoves
                     # both kinds compete on the fewest submoves the finished room needs: chamber
                     # rooms (a few seeds; cheap) and the earlier from-scratch design with its
                     # boulders moved for more (maprando/gymboulders.py); a tie keeps the earlier
@@ -189,7 +189,7 @@ def _work1(job):
             if 'moves' in g.info: msg += ', %d boulder moves (%d submoves)' % (g.info['moves'], g.info.get('submoves', 0))
             return n, m2, msg + ')'
         else:
-            from maprando.gen import generate_cave
+            from maprando.generators.caves import generate_cave
             m2, k, g = generate_cave(d, m, perms, cat, seed, tries)
             if getattr(g, 'split_info', None) and getattr(g, 'allow_split', True):
                 return n, m2, 'randomized (ledge loop: %(parts)d parts)' % g.split_info
@@ -200,7 +200,7 @@ def _work1(job):
 def generate_maps(src, seed, tries, jobs=None, overrides=None, disasm=None):
     """every map is generated from its own seed, so the result does not depend on how many
     worker processes run or in which order they finish."""
-    from maprando.parse import load_disasm
+    from maprando.io.disasm import load_disasm
     import multiprocessing as mp
     d = disasm or load_disasm(src); out = {}; log = {}
     cache = getattr(d, 'cache_path', None)
@@ -233,23 +233,23 @@ def generate_maps(src, seed, tries, jobs=None, overrides=None, disasm=None):
 
 def patch_mode(a):
     """generate caves and write them into an existing romhack build: no make/gcc/rgbds needed."""
-    from maprando.patch import load_sym, patch_map, fix_checksum, base_matches_source
+    from maprando.io.rom import load_sym, patch_map, fix_checksum, base_matches_source
     t0 = time.time()
     sym_path = os.path.splitext(a.patch_base)[0] + '.sym'
     rom = bytearray(open(a.patch_base, 'rb').read()); sym = load_sym(sym_path)
     log = {}
     if not a.no_maps:
-        from maprando.parse import load_disasm
+        from maprando.io.disasm import load_disasm
         d0 = load_disasm(a.src)
         stale = base_matches_source(rom, sym, d0, ALL_MAPS)
         if stale:
             print(f'base ROM does not match the romhack source ({", ".join(stale[:5])}...): rebuild it'); return 2
         overrides = {}
         if a.ir_mode:
-            from maprando.irpatch import ir_block_overrides
+            from maprando.io.item_rando import ir_block_overrides
             overrides = ir_block_overrides(a.ir_root, a.ir_mode, sym, d0, ALL_MAPS)
             if overrides: print(f'maps as the Item Randomizer mode leaves them: {", ".join(sorted(overrides))}')
-            from maprando.irpatch import ir_event_overrides
+            from maprando.io.item_rando import ir_event_overrides
             evs = ir_event_overrides(a.ir_root, a.ir_mode, sym, rom, ALL_MAPS)
             if evs:
                 overrides['__events__'] = evs
@@ -259,7 +259,7 @@ def patch_mode(a):
         if stale:
             print(f'base ROM does not match the romhack source ({", ".join(stale[:5])}...): rebuild it'); return 2
         for m2 in maps.values(): patch_map(rom, sym, m2)
-        from maprando.ship import patch_spins
+        from maprando.checks.ship import patch_spins
         k = patch_spins(rom, sym, d0)
         print(f'S.S. Aqua: {k} standing trainers now spin (no forced battles on the ship)')
         fix_checksum(rom)
@@ -291,7 +291,7 @@ def main(argv=None):
     print(f'working copy {how}: {a.work} ({time.time()-t0:.0f}s)')
     log = {}
     if not a.no_maps:
-        from maprando.emit import emit
+        from maprando.io.disasm_write import emit
         d, maps, log = generate_maps(a.src, a.seed, a.tries)
         for m2 in maps.values(): emit(a.work, m2)
         print(f'maps: {len(maps)}/{len(ALL_MAPS)} randomized ({time.time()-t0:.0f}s)')

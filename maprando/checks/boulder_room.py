@@ -19,8 +19,8 @@ tiles. A design is accepted only if
 Among accepted designs the search prefers more pushes and more changes of push direction."""
 import re
 from collections import deque
-from .model import build_model, classify, COLL_ICE
-from .reach import requirement_matrix, Searcher, entry_starts
+from maprando.model.movement import build_model, classify, COLL_ICE
+from maprando.model.reach import requirement_matrix, Searcher, entry_starts
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
@@ -132,7 +132,7 @@ class BoulderRoom:
     def people(self):
         """tiles of people standing in the room (trainers): walls for boulders and the player."""
         if not hasattr(self, '_people'):
-            from .blocking import people_cells
+            from maprando.checks.blocking import people_cells
             self._people = {self.mm.idx(x, y) for x, y in people_cells(self.base) if self.mm.inb(x, y)}
         return self._people
 

@@ -1,7 +1,7 @@
 """Paths blocked by people: count how the walkable ground falls apart when every person (fixed or
 walking, trainer or not; item balls excluded) stands on its tile as a wall. The requirement model
 treats walking NPCs as passable, so two people side by side in a corridor could slip past it."""
-from .model import classify
+from maprando.model.movement import classify
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
@@ -37,7 +37,7 @@ def split_pairs(mm, m, reach):
 def trainer_people_traps(mm, m, reach):
     """trainers that, after walking up to the player, close a path together with anyone else
     (walking NPCs included). Returns [(trainer const, stop cell)]."""
-    from .trainers import facings
+    from maprando.checks.trainers import facings
     W, H = mm.w, mm.h
     walk = {c for c in reach if classify(mm, mm.coll[c]) in ('land', 'water')}
     people = {mm.idx(x, y) for x, y in people_cells(m) if mm.inb(x, y)}

@@ -10,11 +10,11 @@
    requirement matrix equals vanilla. Any failure raises GenError and the caller retries."""
 import copy, random
 from collections import defaultdict, deque
-from .model import build_model, SURF, WATERFALL, CUT, WHIRLPOOL, ROCK_SMASH, classify, LEDGE_DIRS, DIRS, open_tile
+from maprando.model.movement import build_model, SURF, WATERFALL, CUT, WHIRLPOOL, ROCK_SMASH, classify, LEDGE_DIRS, DIRS, open_tile
 
 NORM = {',': '.', 'H': '#', 'T': '#'}   # plan view of grass / headbutt / cut-tree cells
-from .zones import ZoneGraph, medium
-from .reach import requirement_matrix
+from maprando.model.zones import ZoneGraph, medium
+from maprando.model.reach import requirement_matrix
 
 D4 = [(1, 0), (-1, 0), (0, 1), (0, -1)]
 
@@ -40,8 +40,8 @@ class SplitError(GenError):
 def trigger_matrix(mm, m, src):
     """the requirement matrix with every gate trigger (a coord event whose scene moves the player)
     as a wall: what you reach without stepping on one. None if the map has none."""
-    from .scenes import gate_triggers
-    from .reach import requirement_matrix
+    from maprando.checks.scenes import gate_triggers
+    from maprando.model.reach import requirement_matrix
     trig = [e for e in gate_triggers(m, src) if mm.inb(e.x, e.y)]
     if not trig: return None
     saved = dict(mm.objects)
@@ -64,14 +64,14 @@ def guard_leaks(mm2, m2, m=None):
     """guarded actors someone can walk up to from the map's entrances without stepping on a coord
     event (Cut and Rock Smash allowed, other people out of the way; warps that lead to a floor below
     do not count as ways in: you come up them only after the scene)"""
-    from .model import open_tile
+    from maprando.model.movement import open_tile
     m = m or m2
     acts = guarded_actors(m)
     if not acts or not m2.coord_events: return []
     W = mm2.w
     trig = {mm2.idx(e.x, e.y) for e in m2.coord_events}
     # warps fire only on warp tiles (a hole, a door): leftover warps on plain floor are just floor
-    from .model import WARP_TILES
+    from maprando.model.movement import WARP_TILES
     warps = {mm2.idx(w.x, w.y) for w in m2.warps if mm2.inb(w.x, w.y) and mm2.coll[mm2.idx(w.x, w.y)] in WARP_TILES}
     pos = {o.index: mm2.idx(o.x, o.y) for o in m2.objects}
     act_cells = {pos[o.index] for o in acts}
@@ -92,7 +92,7 @@ def guard_leaks(mm2, m2, m=None):
 def guard_pocket(mm, m):
     """the vanilla pocket round each guarded actor: the tiles reached from beside it without a coord
     event or a firing warp, and every tile touching them (its walls)"""
-    from .model import open_tile, WARP_TILES
+    from maprando.model.movement import open_tile, WARP_TILES
     W = mm.w
     trig = {mm.idx(e.x, e.y) for e in m.coord_events}
     warps = {mm.idx(w.x, w.y) for w in m.warps if mm.inb(w.x, w.y) and mm.coll[mm.idx(w.x, w.y)] in WARP_TILES}
@@ -190,7 +190,7 @@ class CaveGenerator:
         if self.m.tileset == 'TILESET_FOREST': self.route = True   # forest: tree walls, block-aligned like routes
         if mm.features & {'ice', 'current'}:
             raise GenError(f'unsupported features {mm.features}')
-        from .reach import Searcher
+        from maprando.model.reach import Searcher
         s = Searcher(mm)
         self.terminal = s.terminal
         entry_zones = {zg.zone_of[c] for a in mm.anchors if a.is_entry for c in a.cells if c in zg.zone_of}
@@ -232,7 +232,7 @@ class CaveGenerator:
         for c in guard_pocket(mm, self.m):
             lock.add(((c % mm.w) // 2, (c // mm.w) // 2))
         # doormats only fire when the step past them is blocked: keep that tile's block as well
-        from .model import CARPET_DIR
+        from maprando.model.movement import CARPET_DIR
         for c in mm.warp_cells:
             dd = CARPET_DIR.get(mm.coll[c])
             if dd is None or c in moving: continue
@@ -273,7 +273,7 @@ class CaveGenerator:
         # signposts are drawn into the block: keep them where they are (not a plain signpost
         # standing on floor: it does not matter, and moves with its block; signs set into a wall -
         # Rocket Base posters, a Pokemon Center sign - stay with the wall)
-        from .model import plain_signs
+        from maprando.model.movement import plain_signs
         _signs = plain_signs(self.m)
         for b in self.m.bg_events:
             if b.index in _signs and 0 <= b.x < mm.w and 0 <= b.y < mm.h and \
@@ -296,7 +296,7 @@ class CaveGenerator:
                         if 0 <= n[0] < self.Wb and 0 <= n[1] < self.Hb: lock.add(n)
         # people talked to across a counter: the counter, the person and the talking spot stay as in
         # vanilla only when the counter gives a second way to the object (see below)
-        from .model import COUNTERS
+        from maprando.model.movement import COUNTERS
         for a in mm.anchors:
             if a.kind == 'obj' and getattr(a, 'via', None):
                 # zones beside the object (not across a counter) and zones across one
@@ -324,7 +324,7 @@ class CaveGenerator:
         # keep their vanilla blocks, so no new wall turns a step into a jump into a wall
         # (only as a fallback: verify's jump check rejects bad jumps in any design, so these are
         # locked only once half of a map's tries found nothing; see generate)
-        from .jumps import ledge_cells
+        from maprando.checks.jumps import ledge_cells
         self.ledge_lock = {((q % mm.w) // 2, (q // mm.w) // 2) for q in ledge_cells(mm)}
         # Fly destinations stay as in vanilla (with their surroundings)
         for sx, sy in getattr(self.d, 'spawns', {}).get(self.m.name, []):
@@ -335,7 +335,7 @@ class CaveGenerator:
         # objects moved by scripts keep their place and surroundings; so do moveobject targets
         import re as _re
         src = open(self.m.asm_path, encoding='utf-8', errors='replace').read() if self.m.asm_path else ''
-        from .scenes import scripted_paths as _sp
+        from maprando.checks.scenes import scripted_paths as _sp
         # an object that only turns on the spot (Fuchsia Gym's ninja spin) is not staged anywhere
         spins = {n for n, p, _ in _sp(self.m, src) if len(set(p)) == 1} - \
                 {n for n, p, _ in _sp(self.m, src) if len(set(p)) > 1}
@@ -392,7 +392,7 @@ class CaveGenerator:
                     if len(nz) > 1: return True
                 if mm.coll[c] in (0x30, 0x31, 0x32, 0x33): return True
             return False
-        from .zones import cell_edges as _ce
+        from maprando.model.zones import cell_edges as _ce
         E = _ce(mm, s)
         changed = True
         while changed:
@@ -441,8 +441,8 @@ class CaveGenerator:
         # vanilla's decorative ledges that jump into a wall sit in pockets you cannot reach: those
         # pockets stay sealed (their free neighbours stay wall: seal_edges / edges_ok), so a new
         # layout never opens a way to a broken jump
-        from .jumps import bad_jumps
-        from .reach import Searcher, entry_starts
+        from maprando.checks.jumps import bad_jumps
+        from maprando.model.reach import Searcher, entry_starts
         sr = Searcher(mm)
         R0 = set(sr.search([st for a in mm.anchors if a.is_entry for st in entry_starts(mm, a)]))
         def locked_cell(c): return ((c % mm.w) // 2, (c // mm.w) // 2) in lock
@@ -469,7 +469,7 @@ class CaveGenerator:
         for blk in [b for b in self.door_units if b in lock]: del self.door_units[blk]
         for blk in [b for b in getattr(self, 'sign_units', {}) if b in lock]: del self.sign_units[blk]
         self.warp_spots = [w for w in self.warp_spots if (w.x // 2, w.y // 2) not in lock or True]
-        from .zones import cell_edges
+        from maprando.model.zones import cell_edges
         self.cell_edges = cell_edges(mm, s)
         # cells holding a gate object (rock/boulder/conditional NPC) form 1-cell zones:
         # collapse them into gates between the zones on either side
@@ -609,7 +609,7 @@ class CaveGenerator:
         wall never finishes and the game hangs: Slowpoke Well B1F's Kurt after the last grunt),
         and an object whose own script stages a scene keeps its spot and surroundings, so the
         player stands where the scene expects."""
-        from .scenes import scripted_paths, scene_starters
+        from maprando.checks.scenes import scripted_paths, scene_starters
         def add_cell(x, y, margin=0):
             for dx in range(-margin, margin + 1):
                 for dy in range(-margin, margin + 1):
@@ -626,7 +626,7 @@ class CaveGenerator:
     def _zone_reqs(self):
         """{zone: (per entrance: minimal masks to reach any cell of the zone)} (cached)."""
         if getattr(self, '_zreq', None) is not None: return self._zreq
-        from .reach import Searcher, entry_starts, minimize
+        from maprando.model.reach import Searcher, entry_starts, minimize
         mm, zg = self.mm, self.zg
         s = Searcher(mm)
         per = []
@@ -638,7 +638,7 @@ class CaveGenerator:
         return self._zreq
 
     def _retarget_items(self):
-        from .reach import minimize
+        from maprando.model.reach import minimize
         mm = self.mm
         ent = [e.id for e in mm.anchors if e.is_entry]
         def free_cells(z):
@@ -664,7 +664,7 @@ class CaveGenerator:
     def _easier_zone(self, a, b):
         """a zone of the two that, from every entrance, is reachable with no more than the other
         needs (so an item reached from both can move into it alone), or None."""
-        from .reach import Searcher, entry_starts, minimize
+        from maprando.model.reach import Searcher, entry_starts, minimize
         mm, zg = self.mm, self.zg
         s = Searcher(mm)
         req = {a: [], b: []}
@@ -694,7 +694,7 @@ class CaveGenerator:
         # map scripts that read the player's coordinates on entry (Route 16: on Cycling Road you
         # are kept on the bike) decide by where the warps put you, so those warps stay put
         import re as _re
-        from .model import _read_src
+        from maprando.model.movement import _read_src
         if m.asm_path and _re.search(r'VAR_[XY]COORD', _read_src(m.asm_path)):
             self.warp_spot_zone = {}; return
         near = set()
@@ -754,7 +754,7 @@ class CaveGenerator:
         for w in self.warp_spots: self.warp_spot_zone[w.index] = zg.zone_of.get(mm.idx(w.x, w.y))
         # plain signs (model.plain_signs: they only show text) move with their block: a sign
         # block (signpost tile, floor around it) goes to a floor block of the area it is read from
-        from .model import plain_signs
+        from maprando.model.movement import plain_signs
         self.sign_units = {}
         for b in m.bg_events:
             if b.index not in plain_signs(m) or not mm.inb(b.x, b.y): continue
@@ -2221,7 +2221,7 @@ class CaveGenerator:
     def trainer_safe(self, origin, o, blocked):
         """grid version of trainers.unsafe_trainers for one candidate spot: walking up to the
         player from origin must neither split an area nor open the gap it stood in."""
-        from .trainers import facings
+        from maprando.checks.trainers import facings
         P = self.P; W, H = len(P[0]), len(P)
         free = {(x, y) for y in range(H) for x in range(W)
                 if P[y][x] not in ('#', 'V') and (x, y) not in blocked and (x, y) != origin}
@@ -2755,7 +2755,7 @@ class CaveGenerator:
                 ok, diff = self.verify()
                 if ok:
                     # keep the layout with the longest walks among a few valid ones
-                    from .metrics import steps
+                    from maprando.model.metrics import steps
                     # most hidden items at a dead end first, then the longest walks
                     sc = (self.nook_count(self.last_mm2), sum(steps(self.last_mm2)))
                     if best is None or sc > best[0]: best = (sc, copy.deepcopy(self.m2), k)
@@ -2790,7 +2790,7 @@ class CaveGenerator:
 
     def terrain_stats(self, mm2):
         """reachable / present water, grass and headbutt trees outside locked blocks."""
-        from .reach import Searcher, entry_starts
+        from maprando.model.reach import Searcher, entry_starts
         sr = Searcher(mm2)
         reach = set(sr.search([st for a in mm2.anchors if a.is_entry for st in entry_starts(mm2, a)]))
         locked = {mm2.idx(x, y) for (bx, by) in self.lock for x in (bx*2, bx*2+1) for y in (by*2, by*2+1)
@@ -2834,7 +2834,7 @@ class CaveGenerator:
     def zones_reachable(self, mm2):
         """every zone (walkable area) vanilla can reach must be reachable here too, even if it
         holds no check or warp (the requirement table alone would not notice it missing)."""
-        from .reach import Searcher, entry_starts
+        from maprando.model.reach import Searcher, entry_starts
         sr = Searcher(mm2)
         reach = set(sr.search([st for a in mm2.anchors if a.is_entry for st in entry_starts(mm2, a)]))
         seen = set()
@@ -2845,7 +2845,7 @@ class CaveGenerator:
         return f'zones not reachable: {missing}' if missing else None
 
     def trainers_ok(self, mm2):
-        from .trainers import unsafe_trainers
+        from maprando.checks.trainers import unsafe_trainers
         if not hasattr(self, 'vanilla_unsafe'):
             self.vanilla_unsafe = {(o.index, o.x, o.y) for o in unsafe_trainers(self.mm)}
         bad = [o for o in unsafe_trainers(mm2) if (o.index, o.x, o.y) not in self.vanilla_unsafe]
@@ -2854,7 +2854,7 @@ class CaveGenerator:
     def boulders_ok(self, mm2):
         # a Strength puzzle whose solution and traps were checked push by push (Cianwood Gym)
         if getattr(self, 'puzzle_checked', False): return None
-        from .boulders import bad_boulders
+        from maprando.checks.boulders import bad_boulders
         if not hasattr(self, 'vanilla_bad_boulders'):
             self.vanilla_bad_boulders = {(o.index, o.x, o.y) for o in bad_boulders(self.mm)}
         bad = [o for o in bad_boulders(mm2) if (o.index, o.x, o.y) not in self.vanilla_bad_boulders]
@@ -2863,8 +2863,8 @@ class CaveGenerator:
     def people_ok(self, mm2):
         """with everyone standing on their tile (walking NPCs too), and with any trainer walked up
         to the player, no area may fall apart more than in vanilla."""
-        from .blocking import split_pairs, trainer_people_traps
-        from .metrics import reachable
+        from maprando.checks.blocking import split_pairs, trainer_people_traps
+        from maprando.model.metrics import reachable
         if not hasattr(self, 'vanilla_people'):
             r = reachable(self.mm)
             self.vanilla_people = (split_pairs(self.mm, self.m, r),
@@ -2910,7 +2910,7 @@ class CaveGenerator:
         """no way round a gate trigger that vanilla does not have (Route 32: a second way south past
         the Cooltrainer who walks you back without the Zephyr Badge)"""
         if not self.m.asm_path: return None
-        from .model import _read_src
+        from maprando.model.movement import _read_src
         if not hasattr(self, '_trig_v'):
             self._trig_src = _read_src(self.m.asm_path)
             self._trig_v = trigger_matrix(self.mm, self.m, self._trig_src)
@@ -2928,7 +2928,7 @@ class CaveGenerator:
         return f'{bad[0]} starts in a wall' if bad else None
 
     def carpets_ok(self, mm2):
-        from .model import dead_carpets
+        from maprando.model.movement import dead_carpets
         if not hasattr(self, 'vanilla_dead_carpets'): self.vanilla_dead_carpets = set(dead_carpets(self.mm))
         bad = [w for w in dead_carpets(mm2) if w not in self.vanilla_dead_carpets]
         return f'doormat warp {bad[0]} has floor beyond it' if bad else None
@@ -3245,7 +3245,7 @@ class CaveGenerator:
         # fine while nothing reaches it): reachable from some way in
         ew = getattr(self, 'edge_walls', ())
         if not ew: return None
-        from .reach import Searcher, entry_starts
+        from maprando.model.reach import Searcher, entry_starts
         sr = Searcher(mm2)
         R = set(sr.search([st for a in mm2.anchors if a.is_entry for st in entry_starts(mm2, a)]))
         if not hasattr(self, '_edge_R0'):
@@ -3257,7 +3257,7 @@ class CaveGenerator:
     def jumps_ok(self, mm2):
         """no ledge jump may land in a wall, on water, on a person or off the map (the game never
         checks where a jump lands: the player is stuck there), beyond what vanilla already has."""
-        from .jumps import bad_jumps
+        from maprando.checks.jumps import bad_jumps
         if not hasattr(self, '_van_jumps'): self._van_jumps = {(c, d) for c, d, _ in bad_jumps(self.mm)}
         bad = [(c % mm2.w, c // mm2.w, d) for c, d, _ in bad_jumps(mm2) if (c, d) not in self._van_jumps]
         return f'ledge jump into a wall at {bad[0]}' if bad else None

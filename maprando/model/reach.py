@@ -1,8 +1,7 @@
 """Pareto-minimal requirement search: for each entry anchor, the minimal ability sets
 needed to reach every other anchor."""
 from collections import deque
-from .model import (ROCK_SMASH, DIRS, OPP, UP, DOWN, SURF, WATERFALL, FORCED, COLL_WATERFALL, CARPETS, COLL_PIT, COLL_ICE,
-                    LEDGE_DIRS, ABILITY_NAMES, classify, side_walls)
+from maprando.model.movement import ROCK_SMASH, DIRS, OPP, UP, DOWN, SURF, WATERFALL, FORCED, COLL_WATERFALL, CARPETS, COLL_PIT, COLL_ICE, LEDGE_DIRS, ABILITY_NAMES, classify, side_walls
 
 def _add(sets, cell, m):
     cur = sets.get(cell)
@@ -177,7 +176,7 @@ def anchor_masks(mm, sets, anchor):
 def boulder_ids(mm):
     """anchor ids of Strength boulders: nothing to collect there, and every way past one is already
     an entry or anchor of its own, so what it takes to reach the boulder itself does not matter."""
-    from .model import STRENGTH
+    from maprando.model.movement import STRENGTH
     return {f'obj:{o.const or o.index}' for (kind, bits, o) in mm.objects.values()
             if kind == 'bits' and bits == STRENGTH and 'BOULDER' in getattr(o, 'sprite', '')}
 

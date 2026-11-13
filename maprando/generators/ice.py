@@ -13,9 +13,9 @@ its outline and the vanilla tiles around it, and only the rocks inside are redes
 Everything outside the rooms stays vanilla; the full requirement matrix is checked at the end."""
 import copy, math, random
 from collections import defaultdict, deque
-from .model import build_model, classify, COLL_ICE, COLL_PIT, DIRS
-from .reach import requirement_matrix
-from .jumps import bad_jumps
+from maprando.model.movement import build_model, classify, COLL_ICE, COLL_PIT, DIRS
+from maprando.model.reach import requirement_matrix
+from maprando.checks.jumps import bad_jumps
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 DIRNAME = {v: k for k, v in DIRS.items()}   # (dx, dy) -> direction constant
@@ -66,7 +66,7 @@ class IceGenerator:
         for w in m.warps: busy.add((w.x, w.y))
         for e in m.coord_events: busy.add((e.x, e.y))
         for e in m.bg_events: busy.add((e.x, e.y))
-        from .jumps import ledge_cells
+        from maprando.checks.jumps import ledge_cells
         for q in ledge_cells(mm): busy.add((q % W, q // W))   # ledges: keep where jumps land
         items = set()
         for o in m.objects:
@@ -111,7 +111,7 @@ class IceGenerator:
         self.icy = icy
         # only tiles reachable from some entry in vanilla count (cave filler is walkable but void)
         if not hasattr(self, 'vreach'):
-            from .reach import Searcher, entry_starts
+            from maprando.model.reach import Searcher, entry_starts
             S = Searcher(self.vmm); self.vreach = set()
             for e in self.vmm.anchors:
                 if e.is_entry: self.vreach |= set(S.search(entry_starts(self.vmm, e)))
@@ -153,7 +153,7 @@ class IceGenerator:
         """grid: {(x,y): 'I' or '#'} for room cells. Uses the real movement model (sliding, ledges,
         warps). Returns (crossings {area_in: {area_out}}, slides {(in, out): min moves} (only with
         need_moves), traps); decisions per crossing / hidden item go to self.last_choices."""
-        from .reach import Searcher
+        from maprando.model.reach import Searcher
         mm = self.mm; W = mm.w
         area = self.area
         # moves from a tile depend only on tiles in its row and column (slides and ledge jumps are
@@ -450,7 +450,7 @@ class IceGenerator:
 
 def traps(mm):
     """tiles you can reach from some entry but from which no warp or map edge can be reached."""
-    from .reach import Searcher, entry_starts
+    from maprando.model.reach import Searcher, entry_starts
     S = Searcher(mm); ALL = (1 << 40) - 1
     exits = set()
     for e in mm.anchors:

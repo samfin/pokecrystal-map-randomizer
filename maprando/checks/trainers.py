@@ -5,7 +5,7 @@ For every trainer, every direction it may face (the Item Randomizer can flip fac
 face anywhere) and every cell it may stop on, check that
   - the stop cell does not split the walkable area it stands in, and
   - the cell it leaves does not join walkable areas that were apart (a trainer used as a wall)."""
-from .model import classify
+from maprando.model.movement import classify
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 FACING = {'SPRITEMOVEDATA_STANDING_DOWN': (0, 1), 'SPRITEMOVEDATA_STANDING_UP': (0, -1),

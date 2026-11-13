@@ -1,4 +1,4 @@
-from .model import classify
+from maprando.model.movement import classify
 
 def render(mm, rows=None, marks=None):
     marks = marks or {}

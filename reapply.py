@@ -9,8 +9,8 @@ of its signs, hidden items and objects. Everything else the Item Randomizer chan
     python3 reapply.py --ours step1.gbc --final final.gbc --maps-json final.maps.json"""
 import argparse, json, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-from maprando.parse import Disasm, load_disasm
-from maprando.patch import load_sym, events_layout, fix_checksum, BG, OBJ, WARP, warps_at
+from maprando.io.disasm import Disasm, load_disasm
+from maprando.io.rom import load_sym, events_layout, fix_checksum, BG, OBJ, WARP, warps_at
 
 def main():
     ap = argparse.ArgumentParser()
@@ -68,7 +68,7 @@ def main():
                 if ours[i] != van[i] and fin[i] != ours[i]: fin[i] = ours[i]; k += 1
         if k: restored[n] = k
     # S.S. Aqua trainers spin; the Item Randomizer may have rewritten their records
-    from maprando.ship import patch_spins
+    from maprando.checks.ship import patch_spins
     k = patch_spins(fin, sym, d)
     if k: restored['FastShip trainers spinning'] = k
     if restored:

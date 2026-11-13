@@ -15,8 +15,8 @@ per room and cannot see a bad pairing: the generator guarantees connectivity its
 readback checks it again on the final ROM (`pad_rooms_ok`)."""
 import copy, random
 from collections import deque
-from .model import build_model, classify
-from .gen import GenError
+from maprando.model.movement import build_model, classify
+from maprando.generators.caves import GenError
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 

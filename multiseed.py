@@ -1,9 +1,9 @@
 import sys, os, time; sys.path.insert(0, '.')
 from collections import Counter
-from maprando.parse import Disasm, load_disasm
-from maprando.model import load_permissions
-from maprando.catalog import Catalog, catalog_for
-from maprando.gen import CaveGenerator, GenError
+from maprando.io.disasm import Disasm, load_disasm
+from maprando.model.movement import load_permissions
+from maprando.model.catalog import Catalog, catalog_for
+from maprando.generators.caves import CaveGenerator, GenError
 from generate import CAVES, ROUTES
 MAPS = [a for a in os.environ.get('MAPS', '').split(',') if a] or CAVES + ROUTES
 TRIES = int(os.environ.get('TRIES', '400'))

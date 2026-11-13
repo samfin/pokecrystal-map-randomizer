@@ -1,9 +1,9 @@
 """Water vs encounter tables: every cave with a Surf encounter table must have reachable water;
 caves without one must have no water at all (reachable or not)."""
 import re, sys, os; sys.path.insert(0, '.')
-from maprando.parse import Disasm
-from maprando.model import load_permissions, build_model, classify, SURF
-from maprando.reach import Searcher, entry_starts
+from maprando.io.disasm import Disasm
+from maprando.model.movement import load_permissions, build_model, classify, SURF
+from maprando.model.reach import Searcher, entry_starts
 from generate import CAVES
 
 def water_tables(d):

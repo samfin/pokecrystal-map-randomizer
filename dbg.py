@@ -1,8 +1,8 @@
 import sys, random; sys.path.insert(0,'.')
-from maprando.parse import Disasm
-from maprando.model import load_permissions
-from maprando.catalog import Catalog
-from maprando.gen import CaveGenerator, GenError
+from maprando.io.disasm import Disasm
+from maprando.model.movement import load_permissions
+from maprando.model.catalog import Catalog
+from maprando.generators.caves import CaveGenerator, GenError
 from collections import defaultdict
 n=sys.argv[1]; d=Disasm('../pokecrystal-speedchoice2'); perms=load_permissions(d); m=d.maps[n]
 g=CaveGenerator(d,m,perms,Catalog(d,m.tileset,perms,list(d.maps.values())))

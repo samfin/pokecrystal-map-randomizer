@@ -5,8 +5,8 @@ way is blocked (engine/overworld/player_movement.asm .TryJump). It never checks 
 a jump can put the player inside a wall, onto water without Surf, onto a person or off the map,
 where they are stuck. The requirement model only follows jumps that land on free floor, so these
 are checked separately."""
-from .model import DIRS, LEDGE_DIRS, classify, side_walls
-from .reach import Searcher, entry_starts
+from maprando.model.movement import DIRS, LEDGE_DIRS, classify, side_walls
+from maprando.model.reach import Searcher, entry_starts
 
 def bad_jumps(mm, everywhere=False):
     """[(from cell, direction, landing cell or None)] for jumps the player can make from a tile

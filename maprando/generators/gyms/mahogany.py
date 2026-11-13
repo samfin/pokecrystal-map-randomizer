@@ -14,12 +14,12 @@ is then checked with the real movement model: the same requirement matrix (every
 no tile you can reach but not leave, no trainer that can trap you, no ledge jump into a wall."""
 import copy, math, random
 from collections import deque
-from .model import build_model, classify, COLL_ICE
-from .reach import requirement_matrix
-from .ice import traps
-from .jumps import bad_jumps
-from .trainers import unsafe_trainers
-from .gen import GenError
+from maprando.model.movement import build_model, classify, COLL_ICE
+from maprando.model.reach import requirement_matrix
+from maprando.generators.ice import traps
+from maprando.checks.jumps import bad_jumps
+from maprando.checks.trainers import unsafe_trainers
+from maprando.generators.caves import GenError
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 

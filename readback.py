@@ -4,20 +4,20 @@
     python3 readback.py ../output/crystal-<seed>.gbc"""
 import copy, os, sys
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-from maprando.parse import Disasm, load_disasm
-from maprando.model import build_model, load_permissions, dead_carpets, classify, open_tile
-from maprando.gym import GymGenerator
-from maprando.reach import requirement_matrix, Searcher, entry_starts, anchor_masks
-from maprando.patch import load_sym, events_layout, BG, OBJ, WARP, warps_at
+from maprando.io.disasm import Disasm, load_disasm
+from maprando.model.movement import build_model, load_permissions, dead_carpets, classify, open_tile
+from maprando.generators.gyms.standard import GymGenerator
+from maprando.model.reach import requirement_matrix, Searcher, entry_starts, anchor_masks
+from maprando.io.rom import load_sym, events_layout, BG, OBJ, WARP, warps_at
 from generate import ALL_MAPS
-from maprando.trainers import unsafe_trainers
-from maprando.boulders import bad_boulders
-from maprando.blocking import split_pairs, trainer_people_traps
-from maprando.scenes import blocked_walks
-from maprando.jumps import bad_jumps
-from maprando.model import _read_src
-from maprando.metrics import reachable
-from maprando.ice import traps as ice_traps
+from maprando.checks.trainers import unsafe_trainers
+from maprando.checks.boulders import bad_boulders
+from maprando.checks.blocking import split_pairs, trainer_people_traps
+from maprando.checks.scenes import blocked_walks
+from maprando.checks.jumps import bad_jumps
+from maprando.model.movement import _read_src
+from maprando.model.metrics import reachable
+from maprando.generators.ice import traps as ice_traps
 from generate import ICE
 
 import argparse
@@ -28,11 +28,11 @@ d = load_disasm(src); perms = load_permissions(d)
 sym = load_sym(os.path.join(src, 'crystal-speedchoice.sym'))
 rom = open(rom_path, 'rb').read()
 if _a.ir_mode:   # compare against the layouts the Item Randomizer mode leaves (e.g. no Ilex cut tree)
-    from maprando.irpatch import ir_block_overrides
+    from maprando.io.item_rando import ir_block_overrides
     for n, b in ir_block_overrides(os.path.join(HERE, '..', 'Pokemon-Crystal-Item-Randomizer'), _a.ir_mode, sym, d, ALL_MAPS).items():
         d.maps[n].blocks = b
     # and the event positions its patches rewrite (hidden items moved off a tile someone stands on)
-    from maprando.irpatch import ir_event_overrides
+    from maprando.io.item_rando import ir_event_overrides
     for n, evs in ir_event_overrides(os.path.join(HERE, '..', 'Pokemon-Crystal-Item-Randomizer'), _a.ir_mode, sym, rom, ALL_MAPS).items():
         for (kind, i), (x, y) in evs.items():
             e = (d.maps[n].bg_events if kind == 'bg' else d.maps[n].objects)[i]
@@ -51,7 +51,7 @@ for n in ALL_MAPS:
         w.y, w.x = rom[wa + i * WARP], rom[wa + i * WARP + 1]
         if w.dest_map == m2.const: w.dest_idx = rom[wa + i * WARP + 2]
     if n == 'SaffronGym':
-        from maprando.gympads import pad_rooms_ok
+        from maprando.generators.gyms.saffron import pad_rooms_ok
         pads_bad = pad_rooms_ok(d, m2, perms)
     moved_warps += sum(1 for a_, b_ in zip(m.warps, m2.warps) if (a_.x, a_.y) != (b_.x, b_.y))
     changed += m2.blocks != m.blocks
@@ -79,14 +79,14 @@ for n in ALL_MAPS:
         hidden_total += len(hid); hidden_ok += len(hg)
         hidden_lost += [f'{n}:{x}' for x in hv - hg]
     dead += [f'{n}:warp{w}' for w in dead_carpets(mm2) if w not in set(dead_carpets(mm))]
-    from maprando.gen import standing_in_walls
+    from maprando.generators.caves import standing_in_walls
     in_walls += [f'{n}:{c}' for c in standing_in_walls(mm, m, mm2, m2)]
-    from maprando.gen import trigger_matrix
+    from maprando.generators.caves import trigger_matrix
     if m.asm_path:
         _src = _read_src(m.asm_path)
         _tv = trigger_matrix(mm, m, _src)
         if _tv is not None and trigger_matrix(mm2, m2, _src) != _tv: round_trig.append(n)
-    from maprando.gen import guard_leaks
+    from maprando.generators.caves import guard_leaks
     leaks += [f'{n}:{c}' for c in guard_leaks(mm2, m2, m)]
     # hidden items: at the tip of a one-tile dead end, or why not
     # (a cut tree counts as open: once cut, the nook would lead on)
@@ -126,7 +126,7 @@ for n in ALL_MAPS:
         stuck += [f'{n}:{o.const}' for o in bad_boulders(mm2) if (o.index, o.x, o.y) not in vb]
     # objects / hidden items on or beside a warp (vanilla spots allowed)
     # only warps you arrive through: a pit nobody lands on (Ecruteak Gym's floor) needs no space
-    from maprando.model import arrivable as _arr
+    from maprando.model.movement import arrivable as _arr
     near = {(w.x + dx, w.y + dy) for i, w in enumerate(m2.warps) if _arr(d, m2, i)
             for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1))}
     old = {(o.x, o.y) for o in m.objects} | {(b.x, b.y) for b in m.bg_events}
@@ -141,18 +141,18 @@ print(f'hidden items at the tip of a one-tile dead end: {len(tips)}/{len(tips) +
 print(f'scripted walks (cutscenes) blocked by walls or objects: {walks_blocked or "none"}')
 print(f'doors/holes/rocks changed by scripts that connect differently from vanilla: {swaps_bad or "none"}')
 print(f'ledge jumps that land in a wall, on water or on a person (the player is stuck): {jumps_bad or "none"}')
-from maprando.ship import not_spinning, SHIP_MAPS
+from maprando.checks.ship import not_spinning, SHIP_MAPS
 print(f'people and items starting in a wall: {in_walls or "none"}')
 print(f'cutscene actors you can talk to without their scene (crash): {leaks or "none"}')
 print(f'ways round a scene trigger that moves the player (Route 32 Cooltrainer...): {round_trig or "none"}')
 print(f'S.S. Aqua trainers that do not spin (could force a battle): {not_spinning(rom, sym, load_disasm(src)) or "none"}')
 if 'SaffronGym' in ALL_MAPS:
     print(f'Saffron Gym pads (every room reachable from the entrance): {("rooms cut off: " + str(pads_bad)) if pads_bad else "fine"}')
-from maprando.boulderroom import bad_boulder_room
-from maprando.catalog import catalog_for
+from maprando.checks.boulder_room import bad_boulder_room
+from maprando.model.catalog import catalog_for
 if 'CianwoodGym' in ALL_MAPS:
     # Cianwood's Strength puzzle, push by push: solvable, and no push shuts the player in
-    from maprando.pushes import gym_puzzle
+    from maprando.checks.pushes import gym_puzzle
     _n = 'CianwoodGym'; _m = d.maps[_n]; _m2 = copy.deepcopy(_m)
     _a = sym[_n + '_Blocks']; _m2.blocks = bytes(rom[_a:_a + len(_m.blocks)])
     _bg, _nbg, _obj, _nobj = events_layout(rom, sym[_n + '_MapEvents'])
@@ -170,8 +170,8 @@ for _n in ('IcePathB1F', 'BlackthornGym2F'):
     _wa, _nw = warps_at(rom, sym[_n + '_MapEvents'])
     for i, w in enumerate(_m2.warps): w.y, w.x = rom[_wa + i * WARP], rom[_wa + i * WARP + 1]
     # the fewest boulder moves (runs of one boulder's pushes) that drop every boulder, in one go
-    from maprando.pushes import drop_moves
-    from maprando.boulderroom import stonetable
+    from maprando.checks.pushes import drop_moves
+    from maprando.checks.boulder_room import stonetable
     _mm = build_model(d, _m2, perms); _W = _mm.w; _pairs = stonetable(_m)
     _ppl = {_mm.idx(o.x, o.y) for o in _m2.objects if 'BOULDER' not in o.sprite and _mm.inb(o.x, o.y)}
     _fl = {c for c in range(_W * _mm.h) if classify(_mm, _mm.coll[c]) == 'land' and c not in _mm.warp_cells and c not in _ppl}

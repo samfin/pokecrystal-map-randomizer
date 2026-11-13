@@ -6,7 +6,7 @@ it, the tile beyond is free floor the boulder can move onto, and with the boulde
 that was joined through the boulder's cell is still joined (the boulder must not land in a
 one-tile corridor and block it, or block anything else). A boulder cannot be pushed onto an item
 ball that is still there, so item ball tiles never count as landing spots."""
-from .model import classify, STRENGTH
+from maprando.model.movement import classify, STRENGTH
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 
