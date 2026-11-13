@@ -15,7 +15,6 @@ from maprando.checks.boulders import bad_boulders
 from maprando.checks.blocking import split_pairs, trainer_people_traps
 from maprando.checks.scenes import blocked_walks
 from maprando.checks.jumps import bad_jumps
-from maprando.model.movement import _read_src
 from maprando.model.metrics import reachable
 from maprando.generators.ice import traps as ice_traps
 from generate import ICE
@@ -82,8 +81,8 @@ for n in ALL_MAPS:
     from maprando.generators.caves import standing_in_walls
     in_walls += [f'{n}:{c}' for c in standing_in_walls(mm, m, mm2, m2)]
     from maprando.generators.caves import trigger_matrix
-    if m.asm_path:
-        _src = _read_src(m.asm_path)
+    if m.script:
+        _src = m.script
         _tv = trigger_matrix(mm, m, _src)
         if _tv is not None and trigger_matrix(mm2, m2, _src) != _tv: round_trig.append(n)
     from maprando.generators.caves import guard_leaks
@@ -100,10 +99,10 @@ for n in ALL_MAPS:
         elif not walk2(b.x, b.y): why = 'in a wall/rock'
         else: why = 'open floor'
         not_tips.append(f'{n}:bg{b0.index} ({why})')
-    if m.asm_path:
+    if m.script:
         import re as _re
         sw = []
-        for mo in _re.finditer(r'^\s*changeblock\s+(\d+),\s*(\d+),\s*\$([0-9a-fA-F]+)', _read_src(m.asm_path), _re.M):
+        for mo in _re.finditer(r'^\s*changeblock\s+(\d+),\s*(\d+),\s*\$([0-9a-fA-F]+)', m.script, _re.M):
             t = (int(mo.group(1)) // 2, int(mo.group(2)) // 2, int(mo.group(3), 16))
             if t not in sw: sw.append(t)
         for group in [[t] for t in sw] + ([sw] if len(sw) > 1 else []):
@@ -113,7 +112,7 @@ for n in ALL_MAPS:
                 for bx, by, blk in group: b[by * m.width + bx] = blk
                 mv.blocks = bytes(b); mats.append(requirement_matrix(build_model(d, mv, perms)))
             if mats[0] != mats[1]: swaps_bad.append(f'{n}:{group}')
-    if m.asm_path: walks_blocked += [f'{n}:{w[0]} at {w[1]} ({w[2]})' for w in blocked_walks(mm, m, mm2, m2, _read_src(m.asm_path))]
+    if m.script: walks_blocked += [f'{n}:{w[0]} at {w[1]} ({w[2]})' for w in blocked_walks(mm, m, mm2, m2, m.script)]
     vj = {(c, dd) for c, dd, _ in bad_jumps(mm)}
     jumps_bad += [f'{n}:({c % mm2.w},{c // mm2.w}){dd}' for c, dd, _ in bad_jumps(mm2) if (c, dd) not in vj]
     rv, rg = reachable(mm), reachable(mm2)

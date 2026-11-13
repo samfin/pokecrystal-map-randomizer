@@ -18,10 +18,6 @@ SUBMOVE_MAPS = {'BlackthornGym2F'}
 from maprando.checks.boulder_room import player_traps
 
 D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
-import os as _os
-DATA = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), 'data')
-def library_path(name): return _os.path.join(DATA, f'{name}_pieces.json')
-LIBRARY = library_path('IcePathB1F')
 # piece sizes (blocks) per map: Blackthorn 2F is only 5 blocks wide
 SIZES_FOR = {'IcePathB1F': [(4, 4), (4, 3), (3, 4)], 'BlackthornGym2F': [(3, 3), (3, 4), (4, 3)]}
 SIZES = SIZES_FOR['IcePathB1F']
@@ -326,10 +322,12 @@ def best_piece(bw, bh, side, holes, mode, pats, doors, rng, tries=6, extras=0, r
 
 _LIB = {}
 def library(name='IcePathB1F'):
+    """the piece library for a map (maprando/data/<name>_pieces.json; made by tools/make_pieces.py)."""
     if name not in _LIB:
         import json
-        f = library_path(name)
-        _LIB[name] = json.load(open(f))['pieces'] if _os.path.exists(f) else []
+        from importlib import resources
+        f = resources.files('maprando') / 'data' / f'{name}_pieces.json'
+        _LIB[name] = json.loads(f.read_text())['pieces'] if f.is_file() else []
     return _LIB[name]
 
 

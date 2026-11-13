@@ -5,24 +5,8 @@ from maprando.generators.caves.common import D4, GenError
 
 class DrawingMixin:
     def tables(self):
-        """encounter tables for this map: Surf / grass / headbutt (cached on the disassembly)."""
-        d = self.d
-        if not hasattr(d, '_enc_tables'):
-            import re as _re
-            def ids(files, macro='map_id'):
-                out = set()
-                for f in files:
-                    for line in d.read('data', 'wild', f):
-                        mo = _re.match(r'\s*' + macro + r'\s+(\w+)', line)
-                        if mo: out.add(mo.group(1))
-                return out
-            d._enc_tables = {
-                'water': ids(('johto_water.asm', 'kanto_water.asm')),
-                'grass': ids(('johto_grass.asm', 'kanto_grass.asm')),
-                'headbutt': ids(('treemon_maps.asm',), 'treemon_map'),
-            }
-        c = self.m.const
-        return {k: c in v for k, v in d._enc_tables.items()}
+        """encounter tables for this map: Surf / grass / headbutt."""
+        return {k: self.m.const in v for k, v in self.d.wild_maps.items()}
 
     def decorate(self, rng):
         """tall grass and headbutt trees, painted onto the finished plan.

@@ -128,10 +128,9 @@ class VerifyMixin:
     def triggers_ok(self, mm2):
         """no way round a gate trigger that vanilla does not have (Route 32: a second way south past
         the Cooltrainer who walks you back without the Zephyr Badge)"""
-        if not self.m.asm_path: return None
-        from maprando.model.movement import _read_src
+        if not self.m.script: return None
         if not hasattr(self, '_trig_v'):
-            self._trig_src = _read_src(self.m.asm_path)
+            self._trig_src = self.m.script
             self._trig_v = trigger_matrix(self.mm, self.m, self._trig_src)
         if self._trig_v is None: return None
         return None if trigger_matrix(mm2, self.m2, self._trig_src) == self._trig_v else 'a way round a scene trigger'

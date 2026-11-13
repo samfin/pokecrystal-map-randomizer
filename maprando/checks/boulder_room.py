@@ -27,7 +27,7 @@ D4 = ((1, 0), (-1, 0), (0, 1), (0, -1))
 class BoulderRoomError(Exception): pass
 
 def stonetable(m):
-    src = open(m.asm_path, encoding='utf-8', errors='replace').read()
+    src = m.script
     consts = [o.const for o in m.objects]
     return [(consts.index(oc), int(w) - 1) for w, oc in re.findall(r'stonetable\s+(\d+),\s*(\w+)', src)]
 

@@ -9,7 +9,11 @@ from maprando.model.movement import load_permissions
 from maprando.model.catalog import Catalog
 from maprando.checks.boulder_room import BoulderRoom
 from maprando.generators.gyms.blackthorn import BoulderGymScratch
-from maprando.generators.chambers import Piece, LIBRARY  # (Ice Path B1F)
+from maprando.generators.chambers import Piece
+
+def library_path(name):
+    return os.path.join(ROOT, 'maprando', 'data', f'{name}_pieces.json')
+LIBRARY = library_path('IcePathB1F')
 d = load_disasm(os.path.join(ROOT, '..', 'pokecrystal-speedchoice2')); p = load_permissions(d)
 m = d.maps['IcePathB1F']; br = BoulderRoom(d, m, p, Catalog(d, m.tileset, p, [m]))
 g = BoulderGymScratch(d, m, p, free=br.free, room=br.room, move_stairs=False)

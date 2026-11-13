@@ -159,7 +159,7 @@ class AnalysisMixin:
                     if 0 <= n[0] < self.Wb and 0 <= n[1] < self.Hb: lock.add(n)
         # objects moved by scripts keep their place and surroundings; so do moveobject targets
         import re as _re
-        src = open(self.m.asm_path, encoding='utf-8', errors='replace').read() if self.m.asm_path else ''
+        src = self.m.script
         from maprando.checks.scenes import scripted_paths as _sp
         # an object that only turns on the spot (Fuchsia Gym's ninja spin) is not staged anywhere
         spins = {n for n, p, _ in _sp(self.m, src) if len(set(p)) == 1} - \
@@ -519,8 +519,7 @@ class AnalysisMixin:
         # map scripts that read the player's coordinates on entry (Route 16: on Cycling Road you
         # are kept on the bike) decide by where the warps put you, so those warps stay put
         import re as _re
-        from maprando.model.movement import _read_src
-        if m.asm_path and _re.search(r'VAR_[XY]COORD', _read_src(m.asm_path)):
+        if _re.search(r'VAR_[XY]COORD', m.script):
             self.warp_spot_zone = {}; return
         near = set()
         for x, y in ([(e.x, e.y) for e in m.coord_events] + [(b.x, b.y) for b in m.bg_events] +

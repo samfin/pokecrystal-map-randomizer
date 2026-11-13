@@ -39,12 +39,8 @@ MOVING_NPC = {'SPRITEMOVEDATA_WANDER', 'SPRITEMOVEDATA_WALK_UP_DOWN', 'SPRITEMOV
 
 def load_permissions(disasm):
     perms = []
-    for line in disasm.read('data', 'collision_permissions.asm'):
-        l = line.split(';')[0].strip()
-        if l.startswith('db'):
-            v = l[2:].strip()
-            base = LAND if 'LAND_TILE' in v else WATER if 'WATER_TILE' in v else WALL
-            perms.append(base)
+    for v in disasm.collision_permissions:
+        perms.append(LAND if 'LAND_TILE' in v else WATER if 'WATER_TILE' in v else WALL)
     while len(perms) < 256: perms.append(WALL)
     return perms
 
@@ -77,12 +73,6 @@ class MapModel:
 
     def idx(self, x, y): return y * self.w + x
     def inb(self, x, y): return 0 <= x < self.w and 0 <= y < self.h
-
-import functools
-
-@functools.lru_cache(maxsize=None)
-def _read_src(path):
-    return open(path, encoding='utf-8', errors='replace').read()
 
 # doormats: you leave by pressing in their direction, and the game only warps you if that step
 # is blocked (a wall or the map's edge)
@@ -128,8 +118,8 @@ def build_model(disasm, m, perms=None, _raw=False):
         if (c & 0xF0) == 0xA0: feats.add('ledge')
     mm = MapModel(m.name, W, H, coll, alt, {}, {}, features=feats, perms=perms)
     mm.itemballs = set()     # walkable once picked up, but a boulder cannot be pushed onto one
-    if m.asm_path:
-        src = _read_src(m.asm_path)
+    if m.script:
+        src = m.script
         if re.search(r'^\s*changeblock', src, re.M): feats.add('changeblock')
         if re.search(r'applymovement\s+PLAYER', src): feats.add('scripted_player_move')
         if re.search(r'callback\s+MAPCALLBACK_TILES', src): feats.add('tiles_callback')
@@ -226,10 +216,10 @@ def arrivable(disasm, m, index):
         return True
     def swapped(m2, x, y):
         # the tile as scripts can change it (changeblock: a floor that collapses into a hole)
-        if not m2.asm_path: return []
+        if not m2.script: return []
         coll = disasm.tileset_coll[m2.tileset]
         out = []
-        for mo in re.finditer(r'^\s*changeblock\s+(\d+),\s*(\d+),\s*\$([0-9a-fA-F]+)', _read_src(m2.asm_path), re.M):
+        for mo in re.finditer(r'^\s*changeblock\s+(\d+),\s*(\d+),\s*\$([0-9a-fA-F]+)', m2.script, re.M):
             if int(mo.group(1)) // 2 == x // 2 and int(mo.group(2)) // 2 == y // 2:
                 out.append(coll[int(mo.group(3), 16)][(x & 1) + 2 * (y & 1)])
         return out
@@ -249,8 +239,8 @@ def plain_signs(m):
     """indices of bg events that are plain signs: a READ event whose script is one jumptext or
     jumpstd and nothing else (a sign's text; Route 32's signs). Scripts that do anything else (the
     Goldenrod Underground's basement door) are not signs."""
-    if not m.asm_path: return set()
-    lines = _read_src(m.asm_path).splitlines()
+    if not m.script: return set()
+    lines = m.script.splitlines()
     body = {}
     for i, l in enumerate(lines):
         mo = re.match(r'^(\w+):+', l)

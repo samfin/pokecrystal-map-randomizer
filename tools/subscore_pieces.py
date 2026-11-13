@@ -9,7 +9,10 @@ sys.path.insert(0, ROOT)
 from maprando.io.disasm import load_disasm
 from maprando.model.movement import load_permissions
 from maprando.generators.gyms.blackthorn import BoulderGymScratch
-from maprando.generators.chambers import Piece, library_path, piece_kinds, rock_sides_for
+from maprando.generators.chambers import Piece, piece_kinds, rock_sides_for
+
+def library_path(name):
+    return os.path.join(ROOT, 'maprando', 'data', f'{name}_pieces.json')
 ap = argparse.ArgumentParser(); ap.add_argument('--map', default='BlackthornGym2F'); ap.add_argument('--budget', type=float, default=160)
 a = ap.parse_args()
 d = load_disasm(os.path.join(ROOT, '..', 'pokecrystal-speedchoice2')); p = load_permissions(d)

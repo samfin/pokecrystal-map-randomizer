@@ -48,6 +48,7 @@ class MapInfo:
     objects: list = field(default_factory=list)
     blocks: bytes = b''
     asm_path: str = ''
+    script: str = ''     # the map's .asm source (scripts and events)
 
 def _int(s):
     s = s.strip()
@@ -68,6 +69,14 @@ class Disasm:
         self._parse_field_move_blocks()
         for m in self.maps.values():
             self._parse_events(m)
+        # collision permission of each tile type: the db line's value (LAND_TILE, WATER_TILE, ...)
+        self.collision_permissions = [_strip(l)[2:].strip() for l in self.read('data', 'collision_permissions.asm')
+                                      if _strip(l).startswith('db')]
+        # maps with wild encounters: Surf, grass, headbutt trees -> {MAP constant}
+        self.wild_maps = {kind: self._wild_maps(files, macro) for kind, files, macro in (
+            ('water', ('johto_water.asm', 'kanto_water.asm'), 'map_id'),
+            ('grass', ('johto_grass.asm', 'kanto_grass.asm'), 'map_id'),
+            ('headbutt', ('treemon_maps.asm',), 'treemon_map'))}
         # Fly / Escape spawn points: name -> [(x, y)]
         self.spawns = {}
         import os, re
@@ -84,6 +93,14 @@ class Disasm:
     def read(self, *p):
         with open(self.path(*p), encoding='utf-8', errors='replace') as f:
             return f.read().splitlines()
+
+    def _wild_maps(self, files, macro):
+        out = set()
+        for f in files:
+            for line in self.read('data', 'wild', f):
+                mo = re.match(r'\s*' + macro + r'\s+(\w+)', line)
+                if mo: out.add(mo.group(1))
+        return out
 
     # --- maps ---
     def _parse_map_constants(self):
@@ -242,7 +259,8 @@ class Disasm:
         p = self.path('maps', m.name + '.asm')
         if not os.path.exists(p): return
         m.asm_path = p
-        lines = self.read('maps', m.name + '.asm')
+        with open(p, encoding='utf-8', errors='replace') as f: m.script = f.read()
+        lines = m.script.splitlines()
         consts = []
         in_events = False
         counters = {'warp': 0, 'coord': 0, 'bg': 0, 'obj': 0}
@@ -279,16 +297,18 @@ def load_disasm(root, cache_dir=None):
     import hashlib, os, pickle
     root = os.path.abspath(root)
     h = hashlib.sha1(root.encode())        # per location: the cache holds absolute paths
+    h.update(b'format 2')                  # bump when Disasm gains or changes fields
     # only what Disasm reads: map scripts and blocks, map/tileset/event data, constants
     for sub in ('maps', 'constants', os.path.join('data', 'maps'), os.path.join('data', 'tilesets'),
-                os.path.join('data', 'events')):
+                os.path.join('data', 'events'), os.path.join('data', 'wild')):
         d0 = os.path.join(root, sub)
         if not os.path.isdir(d0): continue
         for e in sorted(os.scandir(d0), key=lambda e: e.name):
             if e.is_file() and e.name.endswith(('.asm', '.blk', '.bin')):
                 st = e.stat()
                 h.update(f'{sub}/{e.name}|{st.st_size}|{st.st_mtime_ns}'.encode())
-    for f in (os.path.join('data', 'tilesets.asm'), os.path.join('gfx', 'tilesets.asm')):
+    for f in (os.path.join('data', 'tilesets.asm'), os.path.join('gfx', 'tilesets.asm'),
+              os.path.join('data', 'collision_permissions.asm')):
         if os.path.exists(os.path.join(root, f)):
             st = os.stat(os.path.join(root, f)); h.update(f'{f}|{st.st_size}|{st.st_mtime_ns}'.encode())
     cache_dir = cache_dir or os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'out', '.cache')
