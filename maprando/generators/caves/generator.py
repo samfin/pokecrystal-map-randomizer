@@ -8,10 +8,11 @@
 4. Grow zones towards their vanilla size while keeping a wall between zones that must not touch.
 5. Roughen edges, place objects/hidden items, pick concrete blocks, then verify that the
    requirement matrix equals vanilla. Any failure raises GenError and the caller retries."""
-from collections import defaultdict
+from collections import Counter, defaultdict
 import copy, random
 from maprando.generators.caves.common import (GenError, MergeError, NookError, PairError, PortConflict, SignError,
                                               SplitError, UnifyError, WarpRoomError)
+from maprando.model.metrics import steps
 from maprando.model.movement import build_model
 from maprando.model.reach import requirement_matrix
 from maprando.model.zones import ZoneGraph
@@ -83,7 +84,6 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
         few valid layouts wins. Raises GenError if none passes (or SignError, MergeError,
         SplitError: see generate_cave)."""
         last = None
-        from collections import Counter
         self.errors = Counter()
         self.attach_fail = 0
         # locks added while retrying (port conflicts, frozen zones) are per call: same seed, same map
@@ -101,12 +101,7 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
         pair_fails = 0
         ledge_added = False
         while k < tries and (budget is None or k < budget):
-            if getattr(self, 'sign_units', None) and getattr(self, 'allow_signs', True) and k >= tries // 4 and best is None:
-                raise SignError(f'{self.m.name}: no layout with the signs moved')
-            if getattr(self, 'merged', None) and k >= tries // 4 and best is None:
-                raise MergeError(f'{self.m.name}: no layout with the ledge steps merged')
-            if getattr(self, 'split_info', None) and k >= tries // 4 and best is None:
-                raise SplitError(f'{self.m.name}: no layout with the ledge loop')
+            if k >= tries // 4 and best is None: self._give_up_options()
             if k >= tries // 2 and best is None and not ledge_added:
                 # nothing found without them: keep the ledges' surroundings as in vanilla
                 ledge_added = True; self.lock |= self.ledge_lock
@@ -131,57 +126,17 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
                     raise
                 except PairError as pe:
                     pair_fails += 1
-                    # a small zone that keeps failing to join its neighbours keeps its vanilla blocks
-                    t, a, b, _ = pe.p
-                    z = min((a, b), key=lambda q: self.size.get(q, 0))
-                    unify_fail[('pair', z)] = unify_fail.get(('pair', z), 0) + 1
-                    # small zones give up sooner: freezing a 4-cell islet costs almost nothing
-                    if unify_fail[('pair', z)] == min(25, 8 + self.size.get(z, 50) // 2):
-                        mm = self.mm
-                        for c in self.zg.zones[z]:
-                            self.lock.add(((c % mm.w) // 2, (c // mm.w) // 2))
-                        # and the vanilla crossing between the two zones, so the pair is kept as is
-                        zo = self.zg.zone_of
-                        for c, es in self.cell_edges.items():
-                            if zo.get(c) not in (a, b): continue
-                            for dcell, r in es:
-                                if zo.get(dcell) in (a, b) and zo.get(dcell) != zo.get(c):
-                                    # the whole straight run (a waterfall climb skips the tiles between)
-                                    x0, y0, x1, y1 = c % mm.w, c // mm.w, dcell % mm.w, dcell // mm.w
-                                    for xx in range(min(x0, x1), max(x0, x1) + 1):
-                                        for yy in range(min(y0, y1), max(y0, y1) + 1):
-                                            self.lock.add((xx // 2, yy // 2))
+                    self._on_pair_failure(pe, unify_fail)
                     raise
                 except UnifyError as ue:
                     # a zone that keeps failing to join up (e.g. a corridor ringing a small floor)
                     # keeps its vanilla blocks; everything else is still generated around it
                     unify_fail[ue.z] = unify_fail.get(ue.z, 0) + 1
-                    if unify_fail[ue.z] == 25:
-                        mm = self.mm
-                        for c in self.zg.zones[ue.z]:
-                            self.lock.add(((c % mm.w) // 2, (c // mm.w) // 2))
+                    if unify_fail[ue.z] == 25: self._lock_zone(ue.z)
                     raise
-                self.corridors(rng)
-                self.place_warps(rng)
-                self.widen_ledges(rng)
-                self.build_plan(rng)
-                self.fixed |= getattr(self, 'door_below', set())
-                self.erode(rng, check_only=True)
-                if not self.route:
-                    # routes keep block-aligned corridors: Johto has hardly any half-tree blocks,
-                    # so ragged edges would be drawn as cliffs and fences
-                    self.erode(rng)
-                    self.smooth(rng)
-                    self.erode(rng, check_only=True)
-                if not self.route: self.voidify()
-                self.seal_edges()
-                self.place_objects(rng)
-                self.decorate(rng)
-                self.pick_blocks(rng)
-                ok, diff = self.verify()
+                ok, diff = self._attempt(rng)
                 if ok:
                     # keep the layout with the longest walks among a few valid ones
-                    from maprando.model.metrics import steps
                     # most hidden items at a dead end first, then the longest walks
                     sc = (self.nook_count(self.last_mm2), sum(steps(self.last_mm2)))
                     if best is None or sc > best[0]: best = (sc, copy.deepcopy(self.m2), k)
@@ -192,24 +147,86 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
                 last = f'verify: {diff}'
                 self.errors['verify'] += 1
             except GenError as e:
-                if isinstance(e, NookError):
-                    # a hidden item that never finds room for a nook keeps its vanilla spot
-                    key = ('nook', e.b.index)
-                    unify_fail[key] = unify_fail.get(key, 0) + 1
-                    if unify_fail[key] == 15:
-                        bx, by = e.b.x // 2, e.b.y // 2
-                        for dx in (-1, 0, 1):
-                            for dy in (-1, 0, 1):
-                                if self.inb(bx + dx, by + dy): self.lock.add((bx + dx, by + dy))
-                if isinstance(e, WarpRoomError):
-                    # a warp whose zone keeps leaving no spare block for it stays where it is
-                    key = ('warp', e.blk)
-                    unify_fail[key] = unify_fail.get(key, 0) + 1
-                    if unify_fail[key] == 15:
-                        self.lock.add(e.blk); self.warp_units.pop(e.blk, None); self.door_units.pop(e.blk, None)
+                self._on_failure(e, unify_fail)
                 last = str(e)
                 self.errors[str(e).split(' (')[0].split(' {')[0][:40]] += 1
         if best is not None:
             self.m2 = best[1]; self.walk_score = best[0][1]
             return self.m2, best[2]
         raise GenError(f'{self.m.name}: gave up after {tries} tries; last: {last}')
+
+    def _give_up_options(self):
+        """a quarter of the tries found nothing: drop the optional extras (moved signs, merged
+        ledge steps, the ledge loop) by raising the error generate_cave retries without them."""
+        if getattr(self, 'sign_units', None) and getattr(self, 'allow_signs', True):
+            raise SignError(f'{self.m.name}: no layout with the signs moved')
+        if getattr(self, 'merged', None):
+            raise MergeError(f'{self.m.name}: no layout with the ledge steps merged')
+        if getattr(self, 'split_info', None):
+            raise SplitError(f'{self.m.name}: no layout with the ledge loop')
+
+    def _attempt(self, rng):
+        """one layout after place(): corridors, plan, objects, drawing; then verify() it."""
+        self.corridors(rng)
+        self.place_warps(rng)
+        self.widen_ledges(rng)
+        self.build_plan(rng)
+        self.fixed |= getattr(self, 'door_below', set())
+        self.erode(rng, check_only=True)
+        if not self.route:
+            # routes keep block-aligned corridors: Johto has hardly any half-tree blocks,
+            # so ragged edges would be drawn as cliffs and fences
+            self.erode(rng)
+            self.smooth(rng)
+            self.erode(rng, check_only=True)
+        if not self.route: self.voidify()
+        self.seal_edges()
+        self.place_objects(rng)
+        self.decorate(rng)
+        self.pick_blocks(rng)
+        return self.verify()
+
+    def _lock_zone(self, z):
+        """keep zone z's vanilla blocks."""
+        mm = self.mm
+        for c in self.zg.zones[z]:
+            self.lock.add(((c % mm.w) // 2, (c // mm.w) // 2))
+
+    def _on_pair_failure(self, pe, unify_fail):
+        """a small zone that keeps failing to join its neighbours keeps its vanilla blocks, and so
+        does the vanilla crossing between the two zones."""
+        t, a, b, _ = pe.p
+        z = min((a, b), key=lambda q: self.size.get(q, 0))
+        unify_fail[('pair', z)] = unify_fail.get(('pair', z), 0) + 1
+        # small zones give up sooner: freezing a 4-cell islet costs almost nothing
+        if unify_fail[('pair', z)] == min(25, 8 + self.size.get(z, 50) // 2):
+            self._lock_zone(z)
+            mm = self.mm
+            # and the vanilla crossing between the two zones, so the pair is kept as is
+            zo = self.zg.zone_of
+            for c, es in self.cell_edges.items():
+                if zo.get(c) not in (a, b): continue
+                for dcell, r in es:
+                    if zo.get(dcell) in (a, b) and zo.get(dcell) != zo.get(c):
+                        # the whole straight run (a waterfall climb skips the tiles between)
+                        x0, y0, x1, y1 = c % mm.w, c // mm.w, dcell % mm.w, dcell // mm.w
+                        for xx in range(min(x0, x1), max(x0, x1) + 1):
+                            for yy in range(min(y0, y1), max(y0, y1) + 1):
+                                self.lock.add((xx // 2, yy // 2))
+
+    def _on_failure(self, e, unify_fail):
+        """a hidden item that never finds room for a nook keeps its vanilla spot; a warp whose zone
+        keeps leaving no spare block for it stays where it is."""
+        if isinstance(e, NookError):
+            key = ('nook', e.b.index)
+            unify_fail[key] = unify_fail.get(key, 0) + 1
+            if unify_fail[key] == 15:
+                bx, by = e.b.x // 2, e.b.y // 2
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        if self.inb(bx + dx, by + dy): self.lock.add((bx + dx, by + dy))
+        if isinstance(e, WarpRoomError):
+            key = ('warp', e.blk)
+            unify_fail[key] = unify_fail.get(key, 0) + 1
+            if unify_fail[key] == 15:
+                self.lock.add(e.blk); self.warp_units.pop(e.blk, None); self.door_units.pop(e.blk, None)
