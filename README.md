@@ -5,8 +5,8 @@ ability requirements between every entry point and every check exactly as in van
 
 ## Status: phase 0 (extraction) done
 
-    python3 analyze.py [--maps Route32 ...] [--show]   # requirement matrices -> out/analysis.json
-    python3 crosscheck.py                              # compare with Item Randomizer Map Data -> out/crosscheck.json
+(The analysis scripts of this phase, analyze.py and crosscheck.py, were removed in the web-app
+cleanup; they are in the git history.)
 
 ## Code layout (maprando/)
 
@@ -50,8 +50,6 @@ the blocker is an object), badges.
 
     python3 build.py --seed N        # generate caves, build ROM -> ../output/crystal-maprando.gbc (+ .sym)
     python3 preview.py --seed N      # vanilla vs generated PNGs -> out/preview/
-    python3 multiseed.py 1 2 3       # success rate per cave
-    python3 watercheck.py ~/maprando-build   # water vs encounter-table report for a build
 
 Signs and hidden items count as reached only from a tile next to them (you face them; standing on
 the tile itself does not count). Every accepted map must pass `verify()`:
@@ -162,8 +160,8 @@ tiles and decisions in one search, and after a rock moves drops only the cached 
 reach it (walking out from the changed tile to the first solid tile, plus one beyond for ledge
 jumps); best-of-3 stops looking for alternatives after k/2 more tries; corridor thinning runs on an
 integer graph built once per zone; zone connectivity is memoised per try; small zones that keep
-failing to join their neighbours are frozen sooner (after 8 + cells/2 tries, at most 25). `python3 timing.py --seed S [--profile f.prof]`
-prints per-map times.
+failing to join their neighbours are frozen sooner (after 8 + cells/2 tries, at most 25). `MAPRANDO_TIMES=<file>` makes build.py
+log per-map times.
 
 Hidden items always sit at the tip of a one-tile dead end, picked up by facing it from the one tile
 in front: a nook cut into a wall beside their zone, or, where no wall fits, a floor tile walled in on
@@ -242,8 +240,6 @@ An item ball still lying on a tile blocks a push onto it, so item ball tiles nev
 a boulder can land. The blocks on both sides of a generated boulder gate stay fully open and free of objects, and
 `verify()` rejects layouts that fail (Burned Tower B1F's vanilla boulder, which cannot be pushed
 onto its ladder from the south, is allowed at its vanilla spot).
-
-    python3 metrics.py [--seed S] [--maps A,B]   # vanilla vs generated: mean walk, farthest, % open land
 
 Passes after layout: erosion and smoothing (dungeons only), void fill, object placement,
 hidden items in one-cell wall nooks (stray nooks are filled or widened), block choice,
