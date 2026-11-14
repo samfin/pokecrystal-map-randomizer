@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crystal map randomizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <header>
+    <h1>Crystal map randomizer</h1>
+    <p class="lede">New layouts for the caves, routes, towers and gyms of a randomized Pokémon Crystal
+      speedchoice ROM. Every check needs the same items and abilities as before, so the item
+      randomizer's logic still holds.</p>
+  </header>
+
+  <form id="setup">
+    <label class="drop" for="rom">
+      <input type="file" id="rom" accept=".gbc,.gb">
+      <span class="drop-title" id="rom-name">Choose your ROM</span>
+      <span class="drop-hint" id="rom-hint">A finished speedchoice ROM: after zxplus and the item randomizer.
+        It stays on this computer.</span>
+    </label>
+    <div class="seed-row">
+      <label for="seed">Seed</label>
+      <input type="text" id="seed" autocomplete="off" spellcheck="false">
+      <button type="button" id="new-seed" class="quiet">New seed</button>
+    </div>
+    <p class="hint">The same ROM and seed always give the same maps.</p>
+    <button type="submit" id="go" disabled>Randomize maps</button>
+  </form>
+
+  <section id="run" hidden aria-live="polite">
+    <div class="status">
+      <p id="status-text">Starting Python…</p>
+      <p id="count" class="count"></p>
+    </div>
+    <div id="board" class="board"></div>
+    <p class="legend">
+      <span class="key done"></span>new layout
+      <span class="key vanilla"></span>kept as it was
+      <span class="key working"></span>in progress
+    </p>
+    <p id="detail" class="detail"></p>
+  </section>
+
+  <section id="result" hidden>
+    <a id="download-rom" class="button" download>Download ROM</a>
+    <a id="download-log" class="quiet-link" download>Download the map log</a>
+  </section>
+
+  <p id="error" class="error" role="alert" hidden></p>
+
+  <footer>
+    <p>Runs entirely in your browser with <a href="https://pyodide.org">Pyodide</a>. Generating every map
+      takes a few minutes; keep this tab open. <span id="version"></span></p>
+  </footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

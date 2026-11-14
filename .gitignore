@@ -23,3 +23,7 @@ output/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# web app package and version (built on deploy by tools/build_web.py; the bundle is committed)
+web/data/maprando.zip
+web/data/version.txt

@@ -8,6 +8,23 @@ ability requirements between every entry point and every check exactly as in van
 (The analysis scripts of this phase, analyze.py and crosscheck.py, were removed in the web-app
 cleanup; they are in the git history.)
 
+## Web app (web/)
+
+A static page that runs the randomizer in the browser (Pyodide): the player picks a finished ROM
+(speedchoice, then zxplus and the Item Randomizer), a seed, and gets the ROM back with new layouts
+and a text log. What the Item Randomizer changed in the maps is read from the ROM itself
+(`rom_overrides`), so the layouts match its logic; a seed gives the same maps as `randomize.py`.
+Maps are spread over a few web workers, slowest first.
+
+- `web/index.html`, `style.css`, `app.js` (page and board), `worker.js` (one Pyodide each).
+- `maprando/web.py`: the Python entry points the workers call.
+- `web/data/bundle.pkl.gz`: the parsed disassembly and its map symbols, made by
+  `python3 tools/build_web.py` and committed. Rebuild it when the romhack or the Disasm classes
+  change. The package zip is built on every deploy.
+- `.github/workflows/pages.yml` publishes web/ to GitHub Pages on every push to main.
+
+Try it locally: `python3 tools/build_web.py`, then `python3 -m http.server` in web/.
+
 ## Code layout (maprando/)
 
     from maprando.io.disasm import load_disasm

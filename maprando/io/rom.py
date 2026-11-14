@@ -76,3 +76,44 @@ def base_matches_source(rom: bytes, sym: dict[str, int], disasm: Disasm,
                for i, o in enumerate(m.objects)):
             bad.append(n)
     return bad
+
+
+def rom_problems(rom: bytes, sym: dict[str, int], disasm: Disasm, names: list[str]) -> list[str]:
+    """why a finished ROM (speedchoice, then zxplus and the Item Randomizer) cannot take new
+    layouts: not built from this source (event counts differ) or its maps already randomized
+    (warps moved). Empty if it is fine."""
+    out = []
+    for n in names:
+        m = disasm.maps[n]
+        a, ev = sym.get(n + '_Blocks'), sym.get(n + '_MapEvents')
+        if a is None or ev is None or a + len(m.blocks) > len(rom) or ev + 3 > len(rom):
+            out.append(f'{n}: not in this ROM'); continue
+        bg, nbg, obj, nobj = events_layout(rom, ev)
+        wa, nw = warps_at(rom, ev)
+        if (nw, nbg, nobj) != (len(m.warps), len(m.bg_events), len(m.objects)):
+            out.append(f'{n}: events differ from the speedchoice source'); continue
+        if any((rom[wa + i * WARP + 1], rom[wa + i * WARP]) != (w.x, w.y) for i, w in enumerate(m.warps)):
+            out.append(f'{n}: warps already moved (maps randomized before?)')
+    return out
+
+
+def rom_overrides(rom: bytes, sym: dict[str, int], disasm: Disasm, names: list[str]) -> dict:
+    """what a finished ROM changed in the maps' vanilla data (the Item Randomizer's map patches),
+    in Randomizer's overrides format: {name: blocks} for changed block data, and '__events__':
+    {name: {('bg'|'obj', index): (x, y)}} for moved signs, hidden items and objects."""
+    out, events = {}, {}
+    for n in names:
+        m = disasm.maps[n]
+        a = sym[n + '_Blocks']
+        blocks = bytes(rom[a:a + len(m.blocks)])
+        if blocks != m.blocks: out[n] = blocks
+        bg, nbg, obj, nobj = events_layout(rom, sym[n + '_MapEvents'])
+        for i, b in enumerate(m.bg_events):
+            x, y = rom[bg + i * BG + 1], rom[bg + i * BG]
+            if (x, y) != (b.x, b.y): events.setdefault(n, {})[('bg', i)] = (x, y)
+        for i, o in enumerate(m.objects):
+            x, y = rom[obj + i * OBJ + 2] - 4, rom[obj + i * OBJ + 1] - 4
+            if (x & 0xFF, y & 0xFF) != (o.x & 0xFF, o.y & 0xFF): events.setdefault(n, {})[('obj', i)] = (x, y)
+    if events: out['__events__'] = events
+    return out
+
