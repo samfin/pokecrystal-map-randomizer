@@ -32,6 +32,13 @@ fences and flowers in a patchwork), and the usual coherence pass is skipped. Rou
 eroded as in caves, so blocks can be half open (a fence or a row of roof over floor). Collision is matched
 exactly, so logic and every check are unchanged; only the look is.
 
+## Side paths
+
+Corridor thinning keeps a few extra far-away blocks of each land area as terminals, so the walk
+branches into dead-end side paths that hold nothing: one per 6 blocks of the area, at most 8
+(`side_path_blocks`, `side_paths_max` on CaveGenerator). On a sample of caves and routes that is
+about 35% more dead-end branches; walk length and build time are about the same.
+
 ## Scene triggers as gates
 
 On maps entered from a map edge, a scene trigger that walks the player back (Route 32's

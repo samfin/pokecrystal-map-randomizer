@@ -104,6 +104,17 @@ class CorridorMixin:
             top = max(dmin[b] for b in far)
             p = rng.choice([b for b in far if dmin[b] >= top - 1])
             T.add(p); self.pockets.add(p)
+        # side paths: a few more far-away blocks the corridors must reach, so the walk branches
+        # into dead-end paths that hold nothing (one per side_path_blocks blocks of the zone)
+        for _ in range(min(len(R) // self.side_path_blocks, self.side_paths_max)):
+            dmin = {}
+            for t in T:
+                for b, k in dist_from(t, adj).items():
+                    if b in C and k < dmin.get(b, 1 << 30): dmin[b] = k
+            far = [b for b in C if b not in T and dmin.get(b, 0) >= 3]
+            if not far: break
+            top = max(dmin[b] for b in far)
+            T.add(rng.choice([b for b in far if dmin[b] >= top - 1]))
         Tl = list(T); rng.shuffle(Tl)
         removed = []
         npair = len(Tl) - 1
