@@ -219,7 +219,11 @@ class Disasm:
         coll_consts = self._collision_constants()
         for label, const in const_by_label.items():
             if label in coll_file:
-                self.tileset_coll[const] = self._parse_collision(coll_file[label], coll_consts)
+                coll = self._parse_collision(coll_file[label], coll_consts)
+                # the game never reads block 0's collision: GetCoordTile (home/map.asm) answers -1
+                # (COLL_FF, a wall) for any tile of block 0, whatever its collision data says
+                if coll: coll[0] = (0xFF,) * 4
+                self.tileset_coll[const] = coll
             if label in meta_file and os.path.exists(self.path(meta_file[label])):
                 with open(self.path(meta_file[label]), 'rb') as f:
                     self.tileset_meta[const] = f.read()
@@ -308,7 +312,7 @@ def load_disasm(root: str, cache_dir: str | None = None) -> Disasm:
     import hashlib, os, pickle
     root = os.path.abspath(root)
     h = hashlib.sha1(root.encode())        # per location: the cache holds absolute paths
-    h.update(b'format 2')                  # bump when Disasm gains or changes fields
+    h.update(b'format 3')                  # bump when Disasm gains or changes fields
     # only what Disasm reads: map scripts and blocks, map/tileset/event data, constants
     for sub in ('maps', 'constants', os.path.join('data', 'maps'), os.path.join('data', 'tilesets'),
                 os.path.join('data', 'events'), os.path.join('data', 'wild')):
