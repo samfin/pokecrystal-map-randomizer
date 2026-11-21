@@ -26,20 +26,11 @@ Maps are spread over a few web workers, slowest first.
 
 Try it locally: `python3 tools/build_web.py`, then `python3 -m http.server` in web/.
 
-Route modes (`--cursed` or `--impossible` for build.py and randomize.py, a choice on the page).
-
-Cursed mode: routes are drawn
+Cursed mode (`--cursed` for build.py and randomize.py, a checkbox on the page): routes are drawn
 with every block of their tileset that has the right collision, picked at random (houses, signs,
 fences and flowers in a patchwork), and the usual coherence pass is skipped. Route edges are also
 eroded as in caves, so blocks can be half open (a fence or a row of roof over floor). Collision is matched
 exactly, so logic and every check are unchanged; only the look is.
-
-Impossible mode: routes keep normal layouts, but every solid wall block is block 0 (the engine
-treats it as a wall, whatever its tiles) and every open block is the floor block that looks like it,
-light brown ground (`IMPOSSIBLE_FLOOR` in drawing.py: Johto and Johto-modern 113, Kanto 44), so
-paths are found by walking into them. Blocks that are part wall and part floor, grass, water, ledges
-and vanilla's locked blocks are drawn as usual. Ilex Forest has no lookalike floor (its block 0 is the
-big tree), so only its walls change, and they look as before.
 
 ## Side paths
 

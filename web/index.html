@@ -30,24 +30,12 @@
       <input type="text" id="seed" autocomplete="off" spellcheck="false">
       <button type="button" id="new-seed" class="quiet">New seed</button>
     </div>
-    <fieldset class="modes">
-      <legend>Routes</legend>
-      <label class="option" for="mode-normal">
-        <input type="radio" name="mode" id="mode-normal" value="normal" checked>
-        <span><strong>Normal</strong>: trees, cliffs and fences, as in the rest of the game.</span>
-      </label>
-      <label class="option" for="mode-cursed">
-        <input type="radio" name="mode" id="mode-cursed" value="cursed">
-        <span><strong>Cursed</strong>: built from every tile the overworld has (roofs, fences, signs,
-          flowers) in a patchwork. Walls can look like floor and floor like walls.</span>
-      </label>
-      <label class="option" for="mode-impossible">
-        <input type="radio" name="mode" id="mode-impossible" value="impossible">
-        <span><strong>Impossible</strong>: walls and open ground are drawn with two blocks that look
-          the same, so you find the path by walking into it.</span>
-      </label>
-      <p class="mode-note">What you can reach is the same in every mode.</p>
-    </fieldset>
+    <label class="option" for="cursed">
+      <input type="checkbox" id="cursed">
+      <span><strong>Cursed mode</strong>: routes are built from every tile the overworld has (roofs,
+        fences, signs, flowers) in a patchwork. Walls can look like floor and floor like walls;
+        what you can reach is unchanged.</span>
+    </label>
     <p class="hint">The same ROM, seed and mode always give the same maps.</p>
     <button type="submit" id="go" disabled>Randomize maps</button>
   </form>

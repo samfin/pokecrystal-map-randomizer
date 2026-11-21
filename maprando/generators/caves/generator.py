@@ -28,40 +28,30 @@ from maprando.generators.caves.ledges import LedgeMixin
 from maprando.generators.caves.verify import VerifyMixin
 
 
-MODES = ('normal', 'cursed', 'impossible')
-
-
-def generate_cave(d, m, perms, cat, seed, tries, mode='normal'):
+def generate_cave(d, m, perms, cat, seed, tries, cursed=False):
     """CaveGenerator.generate, with the ledge-loop split when the map has one, and without it
-    if the split finds nothing. mode (routes only): 'cursed' draws with any block of the right
-    collision; 'impossible' draws solid walls with block 0 and open blocks with its lookalike."""
-    assert mode in MODES, mode
-
-    def new():
-        g = CaveGenerator(d, m, perms, cat)
-        g.cursed, g.impossible = mode == 'cursed', mode == 'impossible'
-        return g
-    g = new()
+    if the split finds nothing. cursed: routes are drawn with any block of the right collision."""
+    g = CaveGenerator(d, m, perms, cat); g.cursed = cursed
     merge = True
     while True:
         try:
             return g.generate(seed, tries) + (g,)
         except SignError:
             flags = {k_: getattr(g, k_) for k_ in ('allow_merge', 'split_cap', 'allow_split') if hasattr(g, k_)}
-            g = new(); g.allow_signs = False
+            g = CaveGenerator(d, m, perms, cat); g.cursed = cursed; g.allow_signs = False
             for k_, v_ in flags.items(): setattr(g, k_, v_)
         except MergeError:
             # without merging the ledge steps (and with the loop as it was)
             merge = False
             cap, split = getattr(g, 'split_cap', None), getattr(g, 'allow_split', True)
             signs = getattr(g, 'allow_signs', True)
-            g = new(); g.allow_merge = False; g.allow_signs = signs
+            g = CaveGenerator(d, m, perms, cat); g.cursed = cursed; g.allow_merge = False; g.allow_signs = signs
             g.split_cap, g.allow_split = cap, split
         except SplitError:
             # one part fewer (down to 2), then no loop at all
             k = (getattr(g, 'split_info', None) or {}).get('parts', 2)
             signs = getattr(g, 'allow_signs', True)
-            g = new(); g.allow_merge = merge; g.allow_signs = signs
+            g = CaveGenerator(d, m, perms, cat); g.cursed = cursed; g.allow_merge = merge; g.allow_signs = signs
             if k > 2: g.split_cap = k - 1
             else: g.allow_split = False
 
@@ -72,7 +62,6 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
     generate() below runs them in order."""
     best_of = 3
     cursed = False      # routes drawn with every block of the tileset (DrawingMixin.pick_blocks)
-    impossible = False  # route walls drawn with block 0, floor with its lookalike (DrawingMixin)
     side_path_blocks = 10   # one dead-end side path per this many blocks of a land zone...
     side_paths_max = 8      # ...and at most this many per zone (CorridorMixin._thin_zone)
     side_path_weight = 1.0  # how much a side path's length counts against the main walks' when thinning
