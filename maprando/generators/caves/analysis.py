@@ -54,7 +54,7 @@ class AnalysisMixin:
             mm2 = copy.copy(mm); mm2.coll = list(mm.coll)
             for z in zs:
                 for c in zg.zones[z]: mm2.coll[c] = 0x07
-            return requirement_matrix(mm2, boulders=False) == self.matrix
+            return requirement_matrix(mm2, boulders=False) == self.plan_matrix
         if harmless(cand): self.void = cand
         else: self.void = {z for z in cand if harmless({z})}
         R = R - self.void
@@ -536,7 +536,7 @@ class AnalysisMixin:
             roomy = [z for z in lands if free_cells(z) >= 6]
             if not lands: continue                              # reached by surfing: a water inlet, as before
             if len(S) == 1 and roomy: continue                  # its own area has room: as before
-            want = tuple(tuple(sorted(minimize(self.matrix.get(e, {}).get(aid, []) or []))) for e in ent)
+            want = tuple(tuple(sorted(minimize(self.plan_matrix.get(e, {}).get(aid, []) or []))) for e in ent)
             if not any(want): continue
             zr = self._zone_reqs()
             cands = [z for z in self.Z if self.kind.get(z) == 'land' and zr.get(z) == want and free_cells(z) >= 6]

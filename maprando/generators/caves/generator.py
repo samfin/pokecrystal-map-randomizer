@@ -10,6 +10,7 @@
    requirement matrix equals vanilla. Any failure raises GenError and the caller retries."""
 from collections import Counter, defaultdict
 import copy, random
+from maprando.generators.caves.guards import trigger_gates
 from maprando.generators.caves.common import (GenError, MergeError, NookError, PairError, PortConflict, SignError,
                                               SplitError, UnifyError, WarpRoomError)
 from maprando.model.metrics import steps
@@ -74,8 +75,12 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
     def __init__(self, disasm, m, perms, catalog):
         self.d, self.m, self.perms, self.cat = disasm, m, perms, catalog
         self.mm = build_model(disasm, m, perms)
-        self.zg = ZoneGraph(self.mm)
         self.matrix = requirement_matrix(self.mm, boulders=False)
+        # the plan's model: scene triggers that walk the player back are gates (plan_matrix)
+        self.plan_matrix = self.matrix
+        if trigger_gates(self.mm, m):
+            self.plan_matrix = requirement_matrix(self.mm, boulders=False)
+        self.zg = ZoneGraph(self.mm)
         self.Wb, self.Hb = m.width, m.height
         self._analyze()
 

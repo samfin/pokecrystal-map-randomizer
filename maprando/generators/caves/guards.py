@@ -88,3 +88,25 @@ def standing_in_walls(mm, m, mm2, m2, anchor_zones=None):
             continue          # buried out of reach (no open tile beside it): parked on purpose
         if classify(mm2, mm2.coll[mm2.idx(o.x, o.y)]) is None: out.append(o0.const or f'object {o0.index}')
     return out
+
+
+def trigger_gates(mm, m):
+    """on maps entered from a map edge (routes), make each scene trigger that walks the player
+    back (Route 32's Cooltrainer) a gate in the plan's model: its tile becomes an object that only
+    a requirement bit of its own lets you past, like a story NPC in a gap. The plan then keeps
+    the areas on either side apart, joined only through the trigger, so no layout leads round it.
+    Changes mm in place; returns the number of triggers made gates."""
+    from maprando.checks.scenes import gate_triggers
+    from maprando.io.disasm import ObjectEvent
+    from maprando.model.movement import FIRST_OBJ_BIT
+    if not m.script or not any(a.kind == 'edge' for a in mm.anchors): return 0
+    k = 0
+    bit = max([FIRST_OBJ_BIT >> 1] + list(mm.obj_bits)) << 1
+    for e in gate_triggers(m, m.script):
+        if not mm.inb(e.x, e.y) or mm.idx(e.x, e.y) in mm.objects: continue
+        o = ObjectEvent(e.x, e.y, 'SPRITE_NONE', '', 0, 0, 'OBJECTTYPE_SCRIPT', 0, e.script, '', -1,
+                        const=f'TRIGGER_{e.index}')
+        mm.objects[mm.idx(e.x, e.y)] = ('bits', bit, o); mm.obj_bits[bit] = o.const
+        bit <<= 1; k += 1
+    return k
+

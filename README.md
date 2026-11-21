@@ -32,6 +32,16 @@ fences and flowers in a patchwork), and the usual coherence pass is skipped. Rou
 eroded as in caves, so blocks can be half open (a fence or a row of roof over floor). Collision is matched
 exactly, so logic and every check are unchanged; only the look is.
 
+## Scene triggers as gates
+
+On maps entered from a map edge, a scene trigger that walks the player back (Route 32's
+Cooltrainer, who sends you back without the Zephyr Badge) is a gate in the generator's own model:
+its tile becomes an object only a requirement bit of its own lets you past
+(`guards.trigger_gates`). The areas on either side become separate zones joined only through the
+trigger, the way a story NPC in a gap is handled, so layouts no longer lead round it. Route 32 went
+from 25-100 tries (30-160 s) to 3-15 (4-15 s). The check against vanilla still uses the plain
+model.
+
 ## Code layout (maprando/)
 
     from maprando.io.disasm import load_disasm
