@@ -13,6 +13,10 @@
     return (a[0].toString(36) + a[1].toString(36)).slice(0, 10);
   }
   $('seed').value = newSeed();
+  // show which build this page runs before anything is generated
+  fetch('data/version.txt', { cache: 'no-cache' }).then((r) => (r.ok ? r.text() : '')).then((v) => {
+    if (v.trim() && !$('version').textContent) $('version').textContent = `Version: maprando ${v.trim()}.`;
+  }).catch(() => {});
   $('new-seed').addEventListener('click', () => { $('seed').value = newSeed(); });
 
   function showError(text) { $('error').textContent = text; $('error').hidden = false; }
