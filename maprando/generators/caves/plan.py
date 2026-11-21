@@ -117,7 +117,16 @@ class PlanMixin:
                 for n in [(x+dx, y+dy) for dx, dy in D4] + list(jumps.get((x, y), ())):
                     if n in cs and n not in seen: seen.add(n); st.append(n)
             return len(seen) == len(cells)
-        keep = self.route_keep = self._route_contacts(locked_xy) if self.route else set()
+        keep = self._route_contacts(locked_xy) if self.route else set()
+        def makes_stub(cells):
+            # cursed routes: walling cells must not leave a one-tile dead end beside them, which
+            # would look like a hidden item's nook
+            near = {(x + dx, y + dy) for x, y in cells for dx, dy in D4}
+            for x, y in near:
+                if not (0 <= x < W and 0 <= y < H) or P[y][x] != '.': continue
+                if sum(1 for dx, dy in D4 if 0 <= x+dx < W and 0 <= y+dy < H and P[y+dy][x+dx] not in ('#', 'V')) == 1:
+                    return True
+            return False
         if check_only:
             for z in self.Z:
                 if any(Zc[y][x] == z for y in range(H) for x in range(W) if P[y][x] != '#') and not connected(z):
@@ -147,7 +156,7 @@ class PlanMixin:
                     old = [(c, P[c[1]][c[0]]) for c in cells]
                     for x, y in cells: P[y][x] = '#'
                     floor_left = sum(1 for q in range(4) if P[by*2+(q>>1)][bx*2+(q&1)] != '#')
-                    if floor_left < 1 or not legal(bx, by) or not connected(z):
+                    if floor_left < 1 or not legal(bx, by) or (keep and makes_stub(cells)) or not connected(z):
                         for (x, y), v in old: P[y][x] = v
         for z in self.Z:
             if not connected(z) and any(Zc[y][x] == z for y in range(H) for x in range(W) if P[y][x] != '#'):

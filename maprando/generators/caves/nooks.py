@@ -10,10 +10,10 @@ class NookMixin:
         keep = {(o.x, o.y) for o in m2.objects} | {(b.x, b.y) for b in m2.bg_events} | set(locked_cells)
         keep |= {(w.x, w.y) for w in m2.warps}
         if self.route and self.cursed:
-            # ragged routes leave one-cell stubs everywhere: the tiles in front of signs, hidden
-            # items and people, and the floor erosion kept for contacts, are not stray nooks
-            keep |= {(e.x + dx, e.y + dy) for e in list(m2.objects) + list(m2.bg_events) for dx, dy in D4}
-            keep |= getattr(self, 'route_keep', set())
+            # on ragged routes the tile a sign is read from can be a one-cell stub: keep it
+            for i, (x, y) in getattr(self, 'sign_place', {}).items():
+                u = next((u for u in self.sign_units.values() if u[0].index == i), None)
+                if u is not None: keep.add((x + u[3][0], y + u[3][1]))
         dev = set()
         for by in range(self.Hb):
             for bx in range(self.Wb):
@@ -32,7 +32,13 @@ class NookMixin:
                     if any(P[y+dy][x+dx] not in ('.', '#', 'V') for dx, dy in D4 if 0 <= x+dx < W and 0 <= y+dy < H): continue
                     if any(n in dev for n in nb): continue
                     near = [(x+dx, y+dy) for dx in (-2, -1, 0, 1, 2) for dy in (-2, -1, 0, 1, 2)]
-                    if any(0 <= a < W and 0 <= b < H and (P[b][a] in ('v',) or P[b][a].startswith('L')) for a, b in near):
+                    landing = any(0 <= a < W and 0 <= b < H and (P[b][a] in ('v',) or P[b][a].startswith('L')) for a, b in near)
+                    if self.route and self.cursed:
+                        # ragged routes have stubs beside ledges everywhere: only a cell a jump
+                        # lands on (two tiles on from a ledge facing it) counts as a landing
+                        landing = any(0 <= x - 2*dx < W and 0 <= y - 2*dy < H and P[y - 2*dy][x - 2*dx] == 'L' + k
+                                      for (dx, dy), k in (((1, 0), 'R'), ((-1, 0), 'L'), ((0, 1), 'D'), ((0, -1), 'U')))
+                    if landing:
                         # probably a ledge landing: widen it instead of filling it
                         z = self.Zc[y][x]
                         fx, fy = nb[0][0] - x, nb[0][1] - y          # direction of the way out
