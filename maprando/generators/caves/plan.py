@@ -117,6 +117,7 @@ class PlanMixin:
                 for n in [(x+dx, y+dy) for dx, dy in D4] + list(jumps.get((x, y), ())):
                     if n in cs and n not in seen: seen.add(n); st.append(n)
             return len(seen) == len(cells)
+        keep = self.route_keep = self._route_contacts(locked_xy) if self.route else set()
         if check_only:
             for z in self.Z:
                 if any(Zc[y][x] == z for y in range(H) for x in range(W) if P[y][x] != '#') and not connected(z):
@@ -138,7 +139,7 @@ class PlanMixin:
                     if rng.random() < p_corner: ops.append([(qx, qy)])
                 for op in ops:
                     cells = [(bx*2 + qx, by*2 + qy) for qx, qy in op]
-                    if any(c in self.fixed or P[c[1]][c[0]] != '.' for c in cells): continue
+                    if any(c in self.fixed or c in keep or P[c[1]][c[0]] != '.' for c in cells): continue
                     # only erode towards walls
                     outward = all(any(not (0 <= c[0]+dx < W and 0 <= c[1]+dy < H) or P[c[1]+dy][c[0]+dx] == '#'
                                       for dx, dy in D4) for c in cells)
@@ -259,3 +260,30 @@ class PlanMixin:
             if self.P[y][x] != '#':
                 self.P[y][x] = '#'
                 if hasattr(self, 'Zc'): self.Zc[y][x] = None
+
+    def _route_contacts(self, locked_xy):
+        """floor cells that route erosion (cursed mode) leaves alone: those touching anything but
+        wall or their own zone's floor (ledges, water, gates, doorways into locked blocks, other
+        zones) and the tiles signs are read from. Caves keep their contacts in self.fixed."""
+        P, Zc = self.P, self.Zc
+        W, H = len(P[0]), len(P)
+        out = set()
+        for y in range(H):
+            for x in range(W):
+                if P[y][x] != '.': continue
+                for dx, dy in D4:
+                    nx, ny = x + dx, y + dy
+                    if not (0 <= nx < W and 0 <= ny < H): continue
+                    v = P[ny][nx]
+                    if v == '#' and (nx, ny) not in locked_xy: continue
+                    if v == '.' and Zc[ny][nx] == Zc[y][x] and (nx, ny) not in locked_xy: continue
+                    if v == '#': continue
+                    out.add((x, y)); break
+        for i, (x, y) in getattr(self, 'sign_place', {}).items():
+            u = next((u for u in self.sign_units.values() if u[0].index == i), None)
+            if u is not None: out.add((x + u[3][0], y + u[3][1]))
+        # the pockets corridors() made for items and moving warps keep their shape
+        for bx, by in getattr(self, 'pockets', ()):
+            out |= {(bx*2 + (q & 1), by*2 + (q >> 1)) for q in range(4)}
+        return out
+

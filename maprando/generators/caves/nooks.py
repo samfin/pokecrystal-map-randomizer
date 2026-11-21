@@ -9,6 +9,11 @@ class NookMixin:
         P = self.P; W, H = len(P[0]), len(P)
         keep = {(o.x, o.y) for o in m2.objects} | {(b.x, b.y) for b in m2.bg_events} | set(locked_cells)
         keep |= {(w.x, w.y) for w in m2.warps}
+        if self.route and self.cursed:
+            # ragged routes leave one-cell stubs everywhere: the tiles in front of signs, hidden
+            # items and people, and the floor erosion kept for contacts, are not stray nooks
+            keep |= {(e.x + dx, e.y + dy) for e in list(m2.objects) + list(m2.bg_events) for dx, dy in D4}
+            keep |= getattr(self, 'route_keep', set())
         dev = set()
         for by in range(self.Hb):
             for bx in range(self.Wb):
