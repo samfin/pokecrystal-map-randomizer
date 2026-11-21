@@ -164,11 +164,12 @@ class DrawingMixin:
     def _impossible_blocks(self, out):
         """impossible mode: every solid wall block of the plan becomes block 0 (the engine treats
         it as wall, whatever its tiles) and every open block becomes the floor block that looks
-        like it, so walls and paths can't be told apart. Tilesets with no lookalike floor keep
+        like it, so walls and paths can't be told apart (headbutt trees in walls go too, so routes
+        lose their headbutt spots). Tilesets with no lookalike floor keep
         their floor blocks."""
         floor = IMPOSSIBLE_FLOOR.get(self.m.tileset)
         for i, pat in self.blk_pat.items():
-            if all(c in ('#', 'V') for c in pat): out[i] = 0
+            if all(c in ('#', 'V', 'H') for c in pat): out[i] = 0     # headbutt trees too
             elif floor is not None and all(c == '.' for c in pat): out[i] = floor
 
     def drawable(self, pat):
