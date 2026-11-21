@@ -42,7 +42,7 @@ class BoulderGymScratch:
     drop_k = K           # the exact count's weighting (pushes.K: moves first; 0: submoves only)
     hard_designs = 3     # distinct earlier designs whose boulders are moved
     hard_steps = 300     # boulder steps per design
-    hard_time = 8.0      # seconds for all of it
+    hard_time = 30.0     # seconds for all of it (when it runs out, the result depends on how fast the computer is)
     W_MOVES = 15.0
     W_SUB = 1.0
     # the push searches only need W, _nbrs and _label
