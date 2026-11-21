@@ -1,5 +1,5 @@
 // One Pyodide interpreter running maprando (maprando/web.py). Messages from app.js:
-//   {type: 'init', pkg, bundle, rom}   -> {type: 'ready', problems, groups, names, version}
+//   {type: 'init', pkg, bundle, rom, cursed} -> {type: 'ready', problems, groups, names, version}
 //   {type: 'map', name, seed}          -> {type: 'map', name, data, report, seconds}
 //   {type: 'finish', seed, rom, names, maps, reports, version} -> {type: 'rom', rom, log}
 // Failures come back as {type: 'error', message}.
@@ -23,12 +23,13 @@ async function init(msg) {
   py.unpackArchive(msg.pkg, 'zip', { extractDir: '/home/pyodide/app' });
   py.globals.set('bundle_js', msg.bundle);
   py.globals.set('rom_js', msg.rom);
+  py.globals.set('cursed', !!msg.cursed);
   py.runPython(`
 import sys
 sys.path.insert(0, '/home/pyodide/app')
 from maprando import web
 bundle = bytes(bundle_js.to_py())
-session = web.Session(bundle, bytes(rom_js.to_py()))
+session = web.Session(bundle, bytes(rom_js.to_py()), cursed=cursed)
 del bundle_js, rom_js
 `);
   return {
@@ -65,7 +66,7 @@ names = list(names_js.to_py())
 maps = {n: bytes(b.to_py()) for n, b in zip(names, maps_js)}
 reports = dict(zip(names, reports_js.to_py()))
 out = web.finish(bundle, bytes(rom_js.to_py()), maps)
-log = web.report(seed, version, reports)
+log = web.report(seed, version, reports, cursed=cursed)
 del names_js, maps_js, reports_js, rom_js
 `);
   return { type: 'rom', rom: bytesOf(py.globals.get('out')), log: py.globals.get('log') };

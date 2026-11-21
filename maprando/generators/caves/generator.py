@@ -27,30 +27,30 @@ from maprando.generators.caves.ledges import LedgeMixin
 from maprando.generators.caves.verify import VerifyMixin
 
 
-def generate_cave(d, m, perms, cat, seed, tries):
+def generate_cave(d, m, perms, cat, seed, tries, cursed=False):
     """CaveGenerator.generate, with the ledge-loop split when the map has one, and without it
-    if the split finds nothing."""
-    g = CaveGenerator(d, m, perms, cat)
+    if the split finds nothing. cursed: routes are drawn with any block of the right collision."""
+    g = CaveGenerator(d, m, perms, cat); g.cursed = cursed
     merge = True
     while True:
         try:
             return g.generate(seed, tries) + (g,)
         except SignError:
             flags = {k_: getattr(g, k_) for k_ in ('allow_merge', 'split_cap', 'allow_split') if hasattr(g, k_)}
-            g = CaveGenerator(d, m, perms, cat); g.allow_signs = False
+            g = CaveGenerator(d, m, perms, cat); g.cursed = cursed; g.allow_signs = False
             for k_, v_ in flags.items(): setattr(g, k_, v_)
         except MergeError:
             # without merging the ledge steps (and with the loop as it was)
             merge = False
             cap, split = getattr(g, 'split_cap', None), getattr(g, 'allow_split', True)
             signs = getattr(g, 'allow_signs', True)
-            g = CaveGenerator(d, m, perms, cat); g.allow_merge = False; g.allow_signs = signs
+            g = CaveGenerator(d, m, perms, cat); g.cursed = cursed; g.allow_merge = False; g.allow_signs = signs
             g.split_cap, g.allow_split = cap, split
         except SplitError:
             # one part fewer (down to 2), then no loop at all
             k = (getattr(g, 'split_info', None) or {}).get('parts', 2)
             signs = getattr(g, 'allow_signs', True)
-            g = CaveGenerator(d, m, perms, cat); g.allow_merge = merge; g.allow_signs = signs
+            g = CaveGenerator(d, m, perms, cat); g.cursed = cursed; g.allow_merge = merge; g.allow_signs = signs
             if k > 2: g.split_cap = k - 1
             else: g.allow_split = False
 
@@ -60,6 +60,7 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
     """Generates one cave or route layout; the steps live in the mixins (one module each) and
     generate() below runs them in order."""
     best_of = 3
+    cursed = False      # routes drawn with every block of the tileset (DrawingMixin.pick_blocks)
 
     far_links = True
 

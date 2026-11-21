@@ -25,6 +25,11 @@ Maps are spread over a few web workers, slowest first.
 
 Try it locally: `python3 tools/build_web.py`, then `python3 -m http.server` in web/.
 
+Cursed mode (`--cursed` for build.py and randomize.py, a checkbox on the page): routes are drawn
+with every block of their tileset that has the right collision, picked at random (houses, signs,
+fences and flowers in a patchwork), and the usual coherence pass is skipped. Collision is matched
+exactly, so logic and every check are unchanged; only the look is.
+
 ## Code layout (maprando/)
 
     from maprando.io.disasm import load_disasm

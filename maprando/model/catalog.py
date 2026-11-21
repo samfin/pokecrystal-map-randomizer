@@ -29,6 +29,9 @@ class Catalog:
         P = _P(perms)
         self.pattern = [tuple(cell_class(P, c) for c in q) for q in self.coll]
         self.walls = [tuple(frozenset(side_walls(c)) for c in q) for q in self.coll]
+        # every block of the tileset by its collision pattern, used by vanilla or not (cursed mode)
+        self.by_pattern = defaultdict(list)
+        for b, pat in enumerate(self.pattern): self.by_pattern[pat].append(b)
         self.freq = Counter(); self.H = Counter(); self.V = Counter()
         for m in sample_maps:
             if m.tileset != tileset: continue

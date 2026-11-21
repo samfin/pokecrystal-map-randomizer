@@ -44,12 +44,15 @@ class Randomizer:
 
     overrides: maps as the Item Randomizer mode leaves them, {name: blocks}, plus '__events__':
     {name: {(kind, index): (x, y)}} for the events it moves (maprando.io.item_rando).
-    The disassembly is changed in place: S.S. Aqua's trainers spin and the overrides apply."""
+    cursed: routes are drawn with every block of their tileset that has the right collision, in a
+    patchwork (logic is unchanged). The disassembly is changed in place: S.S. Aqua's trainers
+    spin and the overrides apply."""
     tries = 400             # cave layout attempts per map (routes: at most 150)
     chamber_tries = 4       # chamber rooms built for Blackthorn 2F (each ~2 s)
 
-    def __init__(self, disasm: Disasm, overrides: dict | None = None):
+    def __init__(self, disasm: Disasm, overrides: dict | None = None, cursed: bool = False):
         self.d = disasm
+        self.cursed = cursed
         self.perms = load_permissions(disasm)
         self.catalogs = {}
         spin_trainers(disasm)      # S.S. Aqua trainers spin: generate and check with that
@@ -96,7 +99,7 @@ class Randomizer:
         m = self.d.maps[n]
         tries = min(self.tries, 150) if n in ROUTES else self.tries
         cat = catalog_for(self.d, m, self.perms, self.catalogs)
-        m2, _, g = generate_cave(self.d, m, self.perms, cat, seed, tries)
+        m2, _, g = generate_cave(self.d, m, self.perms, cat, seed, tries, cursed=self.cursed)
         if getattr(g, 'split_info', None) and getattr(g, 'allow_split', True):
             return m2, 'randomized (ledge loop: %(parts)d parts)' % g.split_info
         return m2, 'randomized'

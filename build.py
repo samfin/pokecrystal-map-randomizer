@@ -35,14 +35,14 @@ def prepare_work(src, work):
 
 _W = {}
 
-def _work_init(src, overrides=None, tries=400, worker=False):
+def _work_init(src, overrides=None, tries=400, worker=False, cursed=False):
     if worker:
         # Ctrl+C is for the main process: it stops the pool (workers would only print tracebacks)
         import signal
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     from maprando.io.disasm import load_disasm
     from maprando.randomizer import Randomizer
-    _W['r'] = Randomizer(load_disasm(src), overrides)
+    _W['r'] = Randomizer(load_disasm(src), overrides, cursed=cursed)
     _W['r'].tries = tries
 
 def _work(job):
@@ -52,7 +52,8 @@ def _work(job):
     MAPRANDO_TIMES set to a file, each map's time is added to it."""
     n, seed = job
     cache = os.environ.get('MAPRANDO_CACHE')
-    f = cache and os.path.join(cache, f'{seed}-{n}.pkl')
+    mode = '-cursed' if _W['r'].cursed else ''
+    f = cache and os.path.join(cache, f'{seed}{mode}-{n}.pkl')
     if f and os.path.exists(f):
         with open(f, 'rb') as fh: return pickle.load(fh)
     t = time.time()
@@ -65,7 +66,7 @@ def _work(job):
         os.replace(f + '.tmp', f)
     return r
 
-def generate_maps(src, seed, tries, jobs=None, overrides=None, disasm=None):
+def generate_maps(src, seed, tries, jobs=None, overrides=None, disasm=None, cursed=False):
     """randomize ALL_MAPS over worker processes: (disassembly, {name: new map}, {name: report})."""
     from maprando.io.disasm import load_disasm
     from maprando.randomizer import map_order
@@ -74,9 +75,9 @@ def generate_maps(src, seed, tries, jobs=None, overrides=None, disasm=None):
     todo = [(n, seed) for n in map_order(ALL_MAPS)]
     jobs = jobs or max(1, min(os.cpu_count() or 1, 8))
     if jobs == 1:
-        _work_init(src, overrides, tries=tries); res = [_work(j) for j in todo]
+        _work_init(src, overrides, tries=tries, cursed=cursed); res = [_work(j) for j in todo]
     else:
-        pool = mp.Pool(jobs, initializer=_work_init, initargs=(src, overrides, tries, True))
+        pool = mp.Pool(jobs, initializer=_work_init, initargs=(src, overrides, tries, True, cursed))
         try:
             # wait in short slices: a plain blocking map() cannot be interrupted on Windows
             ar = pool.map_async(_work, todo, chunksize=1)
@@ -116,7 +117,7 @@ def patch_mode(a):
             if evs:
                 overrides['__events__'] = evs
                 print(f'events as the Item Randomizer mode leaves them: {", ".join(sorted(evs))}')
-        d, maps, log = generate_maps(a.src, a.seed, a.tries, overrides=overrides, disasm=d0)
+        d, maps, log = generate_maps(a.src, a.seed, a.tries, overrides=overrides, disasm=d0, cursed=a.cursed)
         stale = []
         if stale:
             print(f'base ROM does not match the romhack source ({", ".join(stale[:5])}...): rebuild it'); return 2
@@ -141,6 +142,7 @@ def main(argv=None):
     ap.add_argument('--out', default=os.path.join(HERE, '..', 'output', 'crystal-maprando.gbc'))
     ap.add_argument('--no-maps', action='store_true', help='build the romhack without changing layouts')
     ap.add_argument('--tries', type=int, default=400)
+    ap.add_argument('--cursed', action='store_true', help='draw routes with every block of their tileset, in a patchwork')
     ap.add_argument('--ir-mode', help='Item Randomizer mode file: generate from the layouts its patches leave')
     ap.add_argument('--ir-root', default=os.path.join(HERE, '..', 'Pokemon-Crystal-Item-Randomizer'))
     ap.add_argument('--patch-base', help='patch this already-built romhack ROM (needs <rom>.sym beside it) instead of rebuilding')
@@ -154,7 +156,7 @@ def main(argv=None):
     log = {}
     if not a.no_maps:
         from maprando.io.disasm_write import emit
-        d, maps, log = generate_maps(a.src, a.seed, a.tries)
+        d, maps, log = generate_maps(a.src, a.seed, a.tries, cursed=a.cursed)
         for m2 in maps.values(): emit(a.work, m2)
         print(f'maps: {len(maps)}/{len(ALL_MAPS)} randomized ({time.time()-t0:.0f}s)')
     json.dump(log, open(os.path.join(a.work, 'maprando.json'), 'w'), indent=1)

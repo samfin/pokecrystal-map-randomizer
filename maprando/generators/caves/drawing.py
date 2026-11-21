@@ -126,6 +126,10 @@ class DrawingMixin:
                     return True
                 left = out[i-1] if bx > 0 else None
                 up = out[i-self.Wb] if by > 0 else None
+                if self.route and self.cursed:
+                    b = self._cursed_block(pat, ok, rng)
+                    if b is not None:
+                        out[i] = b; self.blk_pat[i] = pat; self.blk_ok[i] = ok; continue
                 if self.route and pat == ('#',) * 4 and self.cat.deep:
                     # solid wall on a route: the forest block vanilla uses (cliffs, fences and
                     # signs scattered through corridor walls look like noise)
@@ -149,8 +153,16 @@ class DrawingMixin:
                 if b is None: raise GenError(f'no block for pattern {pat}')
                 out[i] = b
                 self.blk_ok[i] = ok
-        self.refine_blocks(out, rng)
+        if not (self.route and self.cursed): self.refine_blocks(out, rng)
         self.m2.blocks = bytes(out)
+
+    def _cursed_block(self, pat, ok, rng):
+        """cursed mode: any block of the tileset with exactly this collision (and side walls that
+        fit), whatever it looks like - houses, fences, water and flowers in a patchwork. Cells that
+        nothing reaches ('V') may be wall or floor. None if no block fits."""
+        raw = [tuple('#' if c == 'V' else c for c in pat), tuple('.' if c == 'V' else c for c in pat)]
+        cs = [b for r in dict.fromkeys(raw) for b in self.cat.by_pattern.get(r, ()) if ok(b)]
+        return rng.choice(cs) if cs else None
 
     def refine_blocks(self, out, rng, passes=3):
         """re-pick every free block given all four neighbours (iterated conditional modes).

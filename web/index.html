@@ -30,7 +30,13 @@
       <input type="text" id="seed" autocomplete="off" spellcheck="false">
       <button type="button" id="new-seed" class="quiet">New seed</button>
     </div>
-    <p class="hint">The same ROM and seed always give the same maps.</p>
+    <label class="option" for="cursed">
+      <input type="checkbox" id="cursed">
+      <span><strong>Cursed mode</strong>: routes are built from every tile the overworld has (roofs,
+        fences, signs, flowers) in a patchwork. Walls can look like floor and floor like walls;
+        what you can reach is unchanged.</span>
+    </label>
+    <p class="hint">The same ROM, seed and mode always give the same maps.</p>
     <button type="submit" id="go" disabled>Randomize maps</button>
   </form>
 
