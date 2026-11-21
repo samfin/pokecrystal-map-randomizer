@@ -43,7 +43,7 @@ class NookMixin:
                             for na, nb_, _ in olds: P[nb_][na] = '#'
                             P[b][a] = '.'
                             blks = {(a // 2, b // 2)} | {(na // 2, nb // 2) for na, nb, _ in olds}
-                            if all(self.cat.has(tuple(P[q2y*2 + (q >> 1)][q2x*2 + (q & 1)] for q in range(4))) for q2x, q2y in blks):
+                            if all(self.drawable(tuple(P[q2y*2 + (q >> 1)][q2x*2 + (q & 1)] for q in range(4))) for q2x, q2y in blks):
                                 self.Zc[b][a] = z; changed = True; break
                             P[b][a] = '#'
                             for na, nb_, v in olds: P[nb_][na] = v
@@ -52,14 +52,14 @@ class NookMixin:
                     P[y][x] = '#'
                     bx, by = x // 2, y // 2
                     pat = tuple(P[by*2 + (q >> 1)][bx*2 + (q & 1)] for q in range(4))
-                    if not self.cat.has(pat): P[y][x] = old; continue
+                    if not self.drawable(pat): P[y][x] = old; continue
                     self.Zc[y][x] = None; changed = True
 
     def _drawable(self, bx, by):
         P = self.P
         pat = tuple(P[by*2 + (q >> 1)][bx*2 + (q & 1)] for q in range(4))
         # walls of a nook must stay solid: wall or headbutt trees, never passable void
-        return any(self.cat.has(p) for p in (pat, tuple('H' if c == '#' else c for c in pat)))
+        return any(self.drawable(p) for p in (pat, tuple('H' if c == '#' else c for c in pat)))
 
     def make_nook(self, z, used, locked_cells, rng, terrain='.'):
         """Turn a floor tile of zone z into a nook tip by walling up all but one of its open
@@ -210,7 +210,7 @@ class NookMixin:
             def drawable(bx, by):
                 pat = tuple(P[by*2 + (q >> 1)][bx*2 + (q & 1)] for q in range(4))
                 # forests draw walls with headbutt trees: the same nook may exist in that form
-                return any(self.cat.has(p) for p in (pat, tuple('H' if c == '#' else c for c in pat)))
+                return any(self.drawable(p) for p in (pat, tuple('H' if c == '#' else c for c in pat)))
             if all(drawable(bx, by) for bx, by in blocks):
                 used.add(f)   # keep the cell in front free of NPCs
                 return (x, y)

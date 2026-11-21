@@ -174,11 +174,11 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
         self.build_plan(rng)
         self.fixed |= getattr(self, 'door_below', set())
         self.erode(rng, check_only=True)
-        if not self.route:
+        if not self.route or self.cursed:
             # routes keep block-aligned corridors: Johto has hardly any half-tree blocks,
-            # so ragged edges would be drawn as cliffs and fences
+            # so ragged edges would be drawn as cliffs and fences (in cursed mode that is the point)
             self.erode(rng)
-            self.smooth(rng)
+            if not self.route: self.smooth(rng)
             self.erode(rng, check_only=True)
         if not self.route: self.voidify()
         self.seal_edges()

@@ -156,12 +156,24 @@ class DrawingMixin:
         if not (self.route and self.cursed): self.refine_blocks(out, rng)
         self.m2.blocks = bytes(out)
 
+    def drawable(self, pat):
+        """can a block be drawn with cell pattern pat? In cursed mode any block of the tileset
+        counts, used by vanilla or not."""
+        if self.route and self.cursed:
+            return any(r in self.cat.by_pattern for r in self._cursed_raw(pat))
+        return self.cat.has(pat)
+
+    @staticmethod
+    def _cursed_raw(pat):
+        """collision patterns a cursed block may have for plan pattern pat (cells nothing reaches,
+        'V', may be wall or floor)."""
+        return dict.fromkeys([tuple('#' if c == 'V' else c for c in pat), tuple('.' if c == 'V' else c for c in pat)])
+
     def _cursed_block(self, pat, ok, rng):
         """cursed mode: any block of the tileset with exactly this collision (and side walls that
         fit), whatever it looks like - houses, fences, water and flowers in a patchwork. Cells that
         nothing reaches ('V') may be wall or floor. None if no block fits."""
-        raw = [tuple('#' if c == 'V' else c for c in pat), tuple('.' if c == 'V' else c for c in pat)]
-        cs = [b for r in dict.fromkeys(raw) for b in self.cat.by_pattern.get(r, ()) if ok(b)]
+        cs = [b for r in self._cursed_raw(pat) for b in self.cat.by_pattern.get(r, ()) if ok(b)]
         return rng.choice(cs) if cs else None
 
     def refine_blocks(self, out, rng, passes=3):

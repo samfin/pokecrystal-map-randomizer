@@ -28,7 +28,8 @@ Try it locally: `python3 tools/build_web.py`, then `python3 -m http.server` in w
 
 Cursed mode (`--cursed` for build.py and randomize.py, a checkbox on the page): routes are drawn
 with every block of their tileset that has the right collision, picked at random (houses, signs,
-fences and flowers in a patchwork), and the usual coherence pass is skipped. Collision is matched
+fences and flowers in a patchwork), and the usual coherence pass is skipped. Route edges are also
+eroded as in caves, so blocks can be half open (a fence or a row of roof over floor). Collision is matched
 exactly, so logic and every check are unchanged; only the look is.
 
 ## Code layout (maprando/)

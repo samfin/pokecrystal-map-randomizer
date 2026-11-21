@@ -97,7 +97,7 @@ class PlanMixin:
         W, H = len(P[0]), len(P)
         def legal(bx, by):
             pat = tuple(P[by*2 + (q >> 1)][bx*2 + (q & 1)] for q in range(4))
-            return self.cat.has(pat)
+            return self.drawable(pat)
         mmw = self.mm.w
         locked_xy = {(x, y) for (bx, by) in self.lock for x in (bx*2, bx*2+1) for y in (by*2, by*2+1)}
         jumps = {}   # vanilla moves between locked cells that are not plain steps (ledges, waterfalls)
@@ -166,7 +166,7 @@ class PlanMixin:
         def legal(x, y):
             bx, by = x // 2, y // 2
             pat = tuple(P[by*2 + (q >> 1)][bx*2 + (q & 1)] for q in range(4))
-            return self.cat.has(pat)
+            return self.drawable(pat)
         def simple(x, y, z):
             # removing (x,y) keeps its same-zone neighbours connected inside the 3x3 window
             pts = [(x+dx, y+dy) for dx, dy in N8 if is_z(x+dx, y+dy, z)]
