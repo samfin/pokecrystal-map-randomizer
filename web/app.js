@@ -37,12 +37,12 @@
   async function fetchData() {
     if (data) return data;
     const get = async (url) => {
-      const r = await fetch(url);
+      const r = await fetch(url, { cache: 'no-cache' });   // check for a newer deploy every time
       if (!r.ok) throw new Error(`Could not load ${url} (${r.status}). Run tools/build_web.py first.`);
       return new Uint8Array(await r.arrayBuffer());
     };
     const [pkg, bundle] = await Promise.all([get('data/maprando.zip'), get('data/bundle.pkl.gz')]);
-    const v = await fetch('data/version.txt').then((r) => (r.ok ? r.text() : '')).catch(() => '');
+    const v = await fetch('data/version.txt', { cache: 'no-cache' }).then((r) => (r.ok ? r.text() : '')).catch(() => '');
     return (data = { pkg, bundle, version: v.trim() });
   }
 
