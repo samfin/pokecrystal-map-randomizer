@@ -81,7 +81,7 @@
     e.preventDefault();
     if (!rom) return;
     const seed = $('seed').value.trim() || newSeed();
-    const cursed = $('cursed').checked;
+    const mode = document.querySelector('input[name="mode"]:checked').value;
     $('seed').value = seed;
     clearError();
     downloads.forEach(URL.revokeObjectURL); downloads = [];
@@ -92,7 +92,7 @@
     try {
       const { pkg, bundle, version } = await fetchData();
       for (let i = 0; i < WORKERS; i++) workers.push(new Worker('worker.js'));
-      const readies = await Promise.all(workers.map((w) => ask(w, { type: 'init', pkg, bundle, rom, cursed })));
+      const readies = await Promise.all(workers.map((w) => ask(w, { type: 'init', pkg, bundle, rom, mode })));
       const ready = readies[0];
       const versions = [version && `maprando ${version}`, ready.version].filter(Boolean).join(', ');
       if (versions) $('version').textContent = `Version: ${versions}.`;
@@ -132,11 +132,11 @@
       });
       const changed = names.filter((n) => maps[n].length).length;
       $('status-text').textContent = 'Done';
-      $('detail').textContent = `${changed} of ${total} maps have new layouts. Seed ${seed}${cursed ? ', cursed mode' : ''}.`;
+      $('detail').textContent = `${changed} of ${total} maps have new layouts. Seed ${seed}${mode !== 'normal' ? `, ${mode} mode` : ''}.`;
       const romUrl = URL.createObjectURL(new Blob([out.rom], { type: 'application/octet-stream' }));
       const logUrl = URL.createObjectURL(new Blob([out.log], { type: 'text/plain' }));
       downloads = [romUrl, logUrl];
-      const stem = `${romName}-maps-${seed}${cursed ? '-cursed' : ''}`;
+      const stem = `${romName}-maps-${seed}${mode !== 'normal' ? `-${mode}` : ''}`;
       $('download-rom').href = romUrl; $('download-rom').download = `${stem}.gbc`;
       $('download-log').href = logUrl; $('download-log').download = `${stem}.txt`;
       $('result').hidden = false;

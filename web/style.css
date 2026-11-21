@@ -77,6 +77,10 @@ a { color: var(--crystal-deep); }
 .option input { width: 1.15rem; height: 1.15rem; margin: 0.2rem 0 0; accent-color: var(--crystal); flex: none; }
 .option span { color: var(--ink-soft); }
 .option strong { color: var(--ink); }
+.modes { border: 0; padding: 0; margin: 1.5rem 0 0; }
+.modes legend { font-weight: 700; padding: 0; }
+.modes .option { margin-top: 0.6rem; }
+.mode-note { color: var(--ink-soft); font-size: 0.95rem; margin: 0.75rem 0 0; }
 
 button, .button {
   font: 700 1.05rem/1 "Atkinson Hyperlegible", system-ui, sans-serif;

@@ -43,16 +43,16 @@ def map_groups() -> list[tuple[str, list[str]]]:
 
 class Session:
     """One worker's randomizer for one ROM. problems lists why the ROM cannot be used (then
-    nothing else works). cursed: routes drawn with every block of their tileset."""
+    nothing else works). mode: 'normal', 'cursed' or 'impossible' (Randomizer)."""
 
-    def __init__(self, bundle: bytes, rom: bytes, cursed: bool = False):
+    def __init__(self, bundle: bytes, rom: bytes, mode: str = 'normal'):
         self.disasm, self.sym, self.version = load_bundle(bundle)
         rom = bytes(rom)
         self.problems = rom_problems(rom, self.sym, self.disasm, ALL_MAPS)
         if len(rom) != 0x200000: self.problems.insert(0, 'not a 2 MB Pokemon Crystal ROM')
         if self.problems: return
         self.randomizer = Randomizer(self.disasm, rom_overrides(rom, self.sym, self.disasm, ALL_MAPS),
-                                     cursed=cursed)
+                                     mode=mode)
 
     def map_names(self) -> list[str]:
         """every map to randomize, slowest first (hand them out in this order)."""
@@ -77,10 +77,14 @@ def finish(bundle: bytes, rom: bytes, results: dict[str, bytes]) -> bytes:
     return bytes(out)
 
 
-def report(seed: str, version: str, reports: dict[str, str], cursed: bool = False) -> str:
+MODE_NOTES = {'cursed': 'routes drawn with every block of their tileset',
+              'impossible': 'route walls drawn with block 0, open ground with the block that looks like it'}
+
+
+def report(seed: str, version: str, reports: dict[str, str], mode: str = 'normal') -> str:
     """the text log the page offers next to the ROM."""
     lines = ['Crystal map randomizer', f'version: {version}', f'seed: {seed}']
-    if cursed: lines.append('cursed mode: routes drawn with every block of their tileset')
+    if mode in MODE_NOTES: lines.append(f'{mode} mode: {MODE_NOTES[mode]}')
     lines.append('')
     for n in ALL_MAPS:
         r = reports.get(n) or (f'vanilla ({KNOWN_UNSUPPORTED[n]})' if n in KNOWN_UNSUPPORTED else 'vanilla (not run)')

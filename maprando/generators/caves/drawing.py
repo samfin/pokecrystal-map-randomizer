@@ -3,6 +3,10 @@ from collections import defaultdict
 from maprando.generators.caves.common import D4, GenError
 
 
+# impossible mode: per tileset, the all-floor block that looks like block 0 (light brown ground)
+IMPOSSIBLE_FLOOR = {'TILESET_JOHTO': 113, 'TILESET_JOHTO_MODERN': 113, 'TILESET_KANTO': 44}
+
+
 class DrawingMixin:
     """Drawing the cell plan with the tileset's real blocks."""
     def tables(self):
@@ -154,7 +158,18 @@ class DrawingMixin:
                 out[i] = b
                 self.blk_ok[i] = ok
         if not (self.route and self.cursed): self.refine_blocks(out, rng)
+        if self.route and self.impossible: self._impossible_blocks(out)
         self.m2.blocks = bytes(out)
+
+    def _impossible_blocks(self, out):
+        """impossible mode: every solid wall block of the plan becomes block 0 (the engine treats
+        it as wall, whatever its tiles) and every open block becomes the floor block that looks
+        like it, so walls and paths can't be told apart. Tilesets with no lookalike floor keep
+        their floor blocks."""
+        floor = IMPOSSIBLE_FLOOR.get(self.m.tileset)
+        for i, pat in self.blk_pat.items():
+            if all(c in ('#', 'V') for c in pat): out[i] = 0
+            elif floor is not None and all(c == '.' for c in pat): out[i] = floor
 
     def drawable(self, pat):
         """can a block be drawn with cell pattern pat? In cursed mode any block of the tileset
