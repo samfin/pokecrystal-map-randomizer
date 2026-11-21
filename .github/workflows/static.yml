@@ -31,6 +31,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      # web/data/maprando.zip is not committed: zip the Python package from this commit
+      - name: Package maprando
+        run: python3 tools/build_web.py --package-only
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

@@ -7,7 +7,7 @@ and web/data/maprando.zip (the Python package).
     cd web && python3 -m http.server                                   # try it at http://localhost:8000
 
 The bundle needs the built romhack, so it is made here and committed; rebuild it when the romhack
-or the Disasm classes change. The package is made from the repository on every deploy."""
+or the Disasm classes change. The package is made from the repository on every deploy (.github/workflows/static.yml)."""
 import argparse, os, subprocess, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.dirname(HERE)
 sys.path.insert(0, ROOT)

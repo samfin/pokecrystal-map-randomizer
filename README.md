@@ -21,7 +21,8 @@ Maps are spread over a few web workers, slowest first.
 - `web/data/bundle.pkl.gz`: the parsed disassembly and its map symbols, made by
   `python3 tools/build_web.py` and committed. Rebuild it when the romhack or the Disasm classes
   change. The package zip is built on every deploy.
-- `.github/workflows/pages.yml` publishes web/ to GitHub Pages on every push to main.
+- `.github/workflows/static.yml` packages maprando and publishes web/ to GitHub Pages on every push
+  to main.
 
 Try it locally: `python3 tools/build_web.py`, then `python3 -m http.server` in web/.
 
