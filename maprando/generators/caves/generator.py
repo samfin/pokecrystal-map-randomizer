@@ -62,8 +62,9 @@ class CaveGenerator(AnalysisMixin, PlacementMixin, CorridorMixin, PlanMixin, Obj
     generate() below runs them in order."""
     best_of = 3
     cursed = False      # routes drawn with every block of the tileset (DrawingMixin.pick_blocks)
-    side_path_blocks = 6    # one dead-end side path per this many blocks of a land zone...
+    side_path_blocks = 10   # one dead-end side path per this many blocks of a land zone...
     side_paths_max = 8      # ...and at most this many per zone (CorridorMixin._thin_zone)
+    side_path_weight = 1.0  # how much a side path's length counts against the main walks' when thinning
 
     far_links = True
 

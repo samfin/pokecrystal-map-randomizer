@@ -104,8 +104,11 @@ class CorridorMixin:
             top = max(dmin[b] for b in far)
             p = rng.choice([b for b in far if dmin[b] >= top - 1])
             T.add(p); self.pockets.add(p)
-        # side paths: a few more far-away blocks the corridors must reach, so the walk branches
-        # into dead-end paths that hold nothing (one per side_path_blocks blocks of the zone)
+        # side paths: a few more far-away blocks the corridors must reach (one per side_path_blocks
+        # blocks of the zone). The main walks never pass through them, and thinning also lengthens
+        # the way from each one back to the main walks, so each becomes the end of a long dead-end
+        # path that holds nothing.
+        ends = []
         for _ in range(min(len(R) // self.side_path_blocks, self.side_paths_max)):
             dmin = {}
             for t in T:
@@ -114,8 +117,9 @@ class CorridorMixin:
             far = [b for b in C if b not in T and dmin.get(b, 0) >= 3]
             if not far: break
             top = max(dmin[b] for b in far)
-            T.add(rng.choice([b for b in far if dmin[b] >= top - 1]))
-        Tl = list(T); rng.shuffle(Tl)
+            e = rng.choice([b for b in far if dmin[b] >= top - 1])
+            T.add(e); ends.append(e)
+        Tl = [t for t in T if t not in ends]; rng.shuffle(Tl)
         removed = []
         npair = len(Tl) - 1
         # integer graph built once: region blocks + lock pieces; removed blocks are marked dead
@@ -132,14 +136,29 @@ class CorridorMixin:
             for p in ext.get(b, ()): nb[k].append(ix[p]); nb[ix[p]].append(k)
         Ti = [ix[t] for t in Tl]
         Tset = {ix[t] for t in T}
-        def bfs(src, skip=-1, dst=-1):
+        Ei = {ix[e] for e in ends}
+        def bfs(src, skip=-1, dst=-1, through_ends=False):
             dist = [-1] * N; dist[src] = 0; q = deque([src])
             while q:
                 u = q.popleft()
                 if u == dst: break
+                if u in Ei and u != src and not through_ends: continue    # walks stop at side path ends
                 du = dist[u] + 1
                 for v in nb[u]:
                     if dist[v] < 0 and alive[v] and v != skip: dist[v] = du; q.append(v)
+            return dist
+        def to_set(src, targets, skip=-1):
+            """steps from src to the nearest of targets (-1 if none is reached)."""
+            dd = bfs(src, skip=skip, through_ends=True)
+            return min((dd[k] for k in targets if dd[k] >= 0), default=-1), dd
+        def from_set(srcs):
+            dist = [-1] * N; q = deque()
+            for s0 in srcs:
+                if alive[s0]: dist[s0] = 0; q.append(s0)
+            while q:
+                u = q.popleft()
+                for v in nb[u]:
+                    if dist[v] < 0 and alive[v]: dist[v] = dist[u] + 1; q.append(v)
             return dist
         # per pair of consecutive terminals: current walk length and the blocks on a shortest
         # walk. Removing a block off every shortest walk changes nothing, so only the pairs a
@@ -160,7 +179,18 @@ class CorridorMixin:
             if not cand: break
             for i in dirty: refresh(i)
             dirty = set()
-            hot = [k for k in cand if any(k in o for o in onp)]
+            # each side path: its length (its end's distance from the main walks) and the blocks
+            # on its shortest way there
+            main = set().union(*onp) if onp else set()
+            sides = []
+            if Ei and main:
+                dm = from_set(main)
+                for e in Ei:
+                    L, dd = to_set(e, main)
+                    if L > 0:
+                        sides.append((e, L, {k for k in range(nblocks) if alive[k] and dd[k] >= 0 and dm[k] >= 0
+                                             and dd[k] + dm[k] == L} - main))
+            hot = [k for k in cand if any(k in o for o in onp) or any(k in on for _, _, on in sides)]
             if hot:
                 rng.shuffle(hot)
                 best, bs = None, -1.0
@@ -173,6 +203,11 @@ class CorridorMixin:
                             if L < 0: ok = False; break
                             sc += L
                         else: sc += Lp[i]
+                    for e, L, on in sides:
+                        if k in on:
+                            L = to_set(e, main, skip=k)[0]
+                            if L < 0: ok = False; break
+                        sc += self.side_path_weight * L
                     if not ok: continue
                     sc += rng.random()
                     if sc > bs: best, bs = k, sc
