@@ -1,5 +1,6 @@
 // The page: reads the ROM, starts a few Pyodide workers (worker.js), hands each one map at a
-// time (slowest first), paints the board as maps finish, then has one worker write the ROM.
+// time (slowest first), paints the board as maps finish, then has one worker write the ROM and
+// zip the map images.
 (() => {
   const $ = (id) => document.getElementById(id);
   const WORKERS = Math.max(1, Math.min((navigator.hardwareConcurrency || 2) - 1, 6));
@@ -103,7 +104,7 @@
       const cells = buildBoard(ready.groups);
       const queue = ready.names.slice(), total = queue.length;
       for (const n in cells) if (!queue.includes(n)) cells[n].classList.add('vanilla');   // never generated
-      const maps = {}, reports = {};
+      const maps = {}, reports = {}, pngs = {};
       let done = 0;
       $('status-text').textContent = `Generating maps with ${WORKERS} worker${WORKERS > 1 ? 's' : ''}`;
       const tick = () => { $('count').textContent = `${done} of ${total} maps, ${Math.round((performance.now() - started) / 1000)} s`; };
@@ -115,7 +116,7 @@
             const name = queue.shift();
             cells[name].classList.add('working');
             const r = await ask(w, { type: 'map', name, seed });
-            maps[name] = r.data; reports[name] = r.report; done++;
+            maps[name] = r.data; reports[name] = r.report; pngs[name] = r.png; done++;
             cells[name].classList.remove('working');
             cells[name].classList.add(r.data.length ? 'done' : 'vanilla');
             cells[name].title = `${label(name)}: ${r.report}`;
@@ -130,15 +131,20 @@
         type: 'finish', seed, rom, names, version: versions,
         maps: names.map((n) => maps[n]), reports: names.map((n) => reports[n]),
       });
+      $('status-text').textContent = 'Packing the map images';
+      const drawn = names.filter((n) => pngs[n].length);
+      const pics = await ask(workers[0], { type: 'images', seed, names: drawn, pngs: drawn.map((n) => pngs[n]) });
       const changed = names.filter((n) => maps[n].length).length;
       $('status-text').textContent = 'Done';
       $('detail').textContent = `${changed} of ${total} maps have new layouts. Seed ${seed}${cursed ? ', cursed mode' : ''}.`;
       const romUrl = URL.createObjectURL(new Blob([out.rom], { type: 'application/octet-stream' }));
       const logUrl = URL.createObjectURL(new Blob([out.log], { type: 'text/plain' }));
-      downloads = [romUrl, logUrl];
+      const zipUrl = URL.createObjectURL(new Blob([pics.zip], { type: 'application/zip' }));
+      downloads = [romUrl, logUrl, zipUrl];
       const stem = `${romName}-maps-${seed}${cursed ? '-cursed' : ''}`;
       $('download-rom').href = romUrl; $('download-rom').download = `${stem}.gbc`;
       $('download-log').href = logUrl; $('download-log').download = `${stem}.txt`;
+      $('download-images').href = zipUrl; $('download-images').download = `${stem}-images.zip`;
       $('result').hidden = false;
       $('download-rom').focus();
     } catch (err) {

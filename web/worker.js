@@ -1,7 +1,8 @@
 // One Pyodide interpreter running maprando (maprando/web.py). Messages from app.js:
 //   {type: 'init', pkg, bundle, rom, cursed} -> {type: 'ready', problems, groups, names, version}
-//   {type: 'map', name, seed}          -> {type: 'map', name, data, report, seconds}
+//   {type: 'map', name, seed}          -> {type: 'map', name, data, report, png, seconds}
 //   {type: 'finish', seed, rom, names, maps, reports, version} -> {type: 'rom', rom, log}
+//   {type: 'images', seed, names, pngs} -> {type: 'zip', zip}
 // Failures come back as {type: 'error', message}.
 const PYODIDE = 'https://cdn.jsdelivr.net/pyodide/v0.28.0/full/';
 importScripts(PYODIDE + 'pyodide.js');
@@ -20,6 +21,7 @@ function jsOf(proxy) {
 
 async function init(msg) {
   py = await loadPyodide({ indexURL: PYODIDE });
+  await py.loadPackage('pillow');   // for the map images
   py.unpackArchive(msg.pkg, 'zip', { extractDir: '/home/pyodide/app' });
   py.globals.set('bundle_js', msg.bundle);
   py.globals.set('rom_js', msg.rom);
@@ -45,10 +47,14 @@ function randomize(msg) {
   const t = performance.now();
   py.globals.set('name', msg.name);
   py.globals.set('seed', msg.seed);
-  py.runPython('data, report = session.randomize(name, seed)');
+  py.runPython(`
+data, report = session.randomize(name, seed)
+png = session.picture(data) if data else b''
+`);
   return {
     type: 'map', name: msg.name,
     data: bytesOf(py.globals.get('data')),
+    png: bytesOf(py.globals.get('png')),
     report: py.globals.get('report'),
     seconds: (performance.now() - t) / 1000,
   };
@@ -72,6 +78,18 @@ del names_js, maps_js, reports_js, rom_js
   return { type: 'rom', rom: bytesOf(py.globals.get('out')), log: py.globals.get('log') };
 }
 
+function images(msg) {
+  py.globals.set('seed', msg.seed);
+  py.globals.set('names_js', msg.names);
+  py.globals.set('pngs_js', msg.pngs);
+  py.runPython(`
+images = {n: bytes(b.to_py()) for n, b in zip(names_js.to_py(), pngs_js)}
+zip_out = web.images_zip(seed, images, cursed=cursed)
+del names_js, pngs_js, images
+`);
+  return { type: 'zip', zip: bytesOf(py.globals.get('zip_out')) };
+}
+
 self.onmessage = async (e) => {
   const msg = e.data;
   try {
@@ -79,8 +97,9 @@ self.onmessage = async (e) => {
     if (msg.type === 'init') reply = await init(msg);
     else if (msg.type === 'map') reply = randomize(msg);
     else if (msg.type === 'finish') reply = finish(msg);
+    else if (msg.type === 'images') reply = images(msg);
     else throw new Error('unknown message ' + msg.type);
-    const transfer = reply.data ? [reply.data.buffer] : reply.rom ? [reply.rom.buffer] : [];
+    const transfer = [reply.data, reply.png, reply.rom, reply.zip].filter(Boolean).map((b) => b.buffer);
     self.postMessage(reply, transfer);
   } catch (err) {
     self.postMessage({ type: 'error', message: String(err && err.message || err) });

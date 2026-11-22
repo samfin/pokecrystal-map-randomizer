@@ -14,7 +14,10 @@ A static page that runs the randomizer in the browser (Pyodide): the player pick
 (speedchoice, then zxplus and the Item Randomizer), a seed, and gets the ROM back with new layouts
 and a text log. What the Item Randomizer changed in the maps is read from the ROM itself
 (`rom_overrides`), so the layouts match its logic; a seed gives the same maps as `randomize.py`.
-Maps are spread over a few web workers, slowest first.
+Maps are spread over a few web workers, slowest first. Each worker also draws every new map
+(`maprando/io/render.py`, with Pillow, which the worker loads) with its warps, items, trainers,
+people, rocks, boulders and signs marked, and the page offers those images as a separate zip
+(`images_zip`, with a README of the markers). The bundle carries the tile graphics for this.
 
 - `web/index.html`, `style.css`, `app.js` (page and board), `worker.js` (one Pyodide each).
 - `maprando/web.py`: the Python entry points the workers call.
