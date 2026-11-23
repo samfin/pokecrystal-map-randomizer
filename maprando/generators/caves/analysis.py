@@ -333,6 +333,18 @@ class AnalysisMixin:
                     if mm.inb(x + ex, y + ey):
                         n = mm.idx(x + ex, y + ey)
                         if n not in pocket and not locked_cell(n): self.edge_walls.add(n)
+        # door, stairs and cave tiles with no warp event (the far side of a gatehouse): stepping
+        # on one warps nowhere and the game walks you back down off it, so it looks like a door
+        # that throws you out. Vanilla keeps them out of reach; their free neighbours stay wall
+        # unless vanilla reaches them (seal_edges / edges_ok)
+        from maprando.model.reach import EJECT_DOWN
+        for c in range(mm.w * mm.h):
+            if mm.coll[c] not in EJECT_DOWN or c in mm.warp_cells or c in R0: continue
+            x, y = c % mm.w, c // mm.w
+            for ex, ey in D4:
+                if mm.inb(x + ex, y + ey):
+                    n = mm.idx(x + ex, y + ey)
+                    if n not in R0 and not locked_cell(n): self.edge_walls.add(n)
 
     def _gate_zones(self, s, R):
         """drop warp/door/sign units inside locked blocks, and collapse 1-cell gate-object zones
